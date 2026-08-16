@@ -1,4 +1,4 @@
-```tsx
+
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { Spinner } from "@/lib/ui";
@@ -21,31 +21,33 @@ export default function Auth() {
     try {
       if (mode === "signin") {
         const { error } = await signIn(username, password);
-        if (error) setError(error);
+        if (error) {
+          setError(error);
+        }
       } else {
         if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
           setError(
-            "Username must be 3-20 letters, numbers or underscores.",
+            "Username must be 3-20 letters, numbers or underscores."
           );
-          setBusy(false);
           return;
         }
 
         if (!/^atto:\/\/[a-z2-7]{61}$/.test(attoAddress)) {
           setError(
-            "Enter a valid ATTO address (atto:// followed by 61 characters).",
+            "Enter a valid ATTO address (atto:// followed by 61 characters)."
           );
-          setBusy(false);
           return;
         }
 
         const { error } = await signUp(
           username,
           password,
-          attoAddress,
+          attoAddress
         );
 
-        if (error) setError(error);
+        if (error) {
+          setError(error);
+        }
       }
     } finally {
       setBusy(false);
@@ -139,7 +141,9 @@ export default function Auth() {
                 required
                 minLength={6}
                 autoComplete={
-                  mode === "signin" ? "current-password" : "new-password"
+                  mode === "signin"
+                    ? "current-password"
+                    : "new-password"
                 }
                 className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
                 placeholder="At least 6 characters"
@@ -183,7 +187,9 @@ export default function Auth() {
               className="w-full py-2.5 bg-gradient-to-r from-sky-600 to-emerald-600 hover:from-sky-500 hover:to-emerald-500 text-white font-semibold rounded-lg transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {busy && <Spinner size={16} />}
-              {mode === "signin" ? "Sign In" : "Create Account"}
+              {mode === "signin"
+                ? "Sign In"
+                : "Create Account"}
             </button>
           </form>
         </div>
@@ -195,4 +201,3 @@ export default function Auth() {
     </div>
   );
 }
-```
