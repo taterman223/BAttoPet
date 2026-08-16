@@ -1,3 +1,4 @@
+```tsx
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase, type Player } from "./supabase";
@@ -7,7 +8,7 @@ interface AuthState {
   session: Session | null;
   player: Player | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (username: string, password: string) => Promise<{ error: string | null }>;
   signUp: (username: string, password: string, attoAddress: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshPlayer: () => Promise<void>;
@@ -22,19 +23,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadPlayer = useCallback(async (uid: string) => {
-    const { data, error } = await supabase.from("players").select("*").eq("id", uid).maybeSingle();
+    const { data, error } = await supabase
+      .from("players")
+      .select("*")
+      .eq("id", uid)
+      .maybeSingle();
+
     if (error || !data) {
       setPlayer(null);
       return;
     }
+
     setPlayer(data as Player);
-    await supabase.from("players").update({ last_login: new Date().toISOString() }).eq("id", uid);
+
+    await supabase
+      .from("players")
+      .update({ last_login: new Date().toISOString() })
+      .eq("id", uid);
   }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setUser(data.session?.user ?? null);
+
       if (data.session?.user) {
         (async () => {
           await loadPlayer(data.session!.user.id);
@@ -48,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
       setSession(sess);
       setUser(sess?.user ?? null);
+
       if (sess?.user) {
         (async () => {
           await loadPlayer(sess.user.id);
@@ -60,23 +73,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, [loadPlayer]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  // Username-based login.
+  // Supabase Auth internally uses the same private email format
+  // that the signup Edge Function creates.
+  const signIn = useCallback(async (username: string, password: string) => {
+    const email = `${username.trim().toLowerCase()}@atto-pets.local`;
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
     return { error: error?.message ?? null };
   }, []);
 
-  const signUp = useCallback(async (username: string, password: string, attoAddress: string) => {
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ username, password, atto_address: attoAddress }),
-    });
-    const data = await res.json();
-    if (!res.ok) return { error: data.error ?? "Sign-up failed." };
-    const email = `${username.toLowerCase()}@atto-pets.local`;
-    const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: loginErr?.message ?? null };
-  }, []);
+  const signUp = useCallback(
+    async (username: string, password: string, attoAddress: string) => {
+      const cleanUsername = username.trim();
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/signup`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            username: cleanUsername,
+            password,
+            atto_address: attoAddress,
+          }),
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { error: data.error ?? "Sign-up failed." };
+      }
+
+      const email = `${cleanUsername.toLowerCase()}@atto-pets.local`;
+
+      const { error: loginErr } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      return { error: loginErr?.message ?? null };
+    },
+    [],
+  );
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -84,11 +131,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshPlayer = useCallback(async () => {
-    if (user) await loadPlayer(user.id);
+    if (user) {
+      await loadPlayer(user.id);
+    }
   }, [user, loadPlayer]);
 
   return (
-    <AuthContext.Provider value={{ user, session, player, loading, signIn, signUp, signOut, refreshPlayer }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        player,
+        loading,
+        signIn,
+        signUp,
+        signOut,
+        refreshPlayer,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -96,6 +156,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+
+  if (!ctx) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+
   return ctx;
 }
+```
