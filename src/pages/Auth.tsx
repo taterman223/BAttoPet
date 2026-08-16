@@ -1,3 +1,4 @@
+```tsx
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { Spinner } from "@/lib/ui";
@@ -7,7 +8,6 @@ export default function Auth() {
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [attoAddress, setAttoAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,17 +17,34 @@ export default function Auth() {
     e.preventDefault();
     setError(null);
     setBusy(true);
+
     try {
       if (mode === "signin") {
-        const { error } = await signIn(email, password);
+        const { error } = await signIn(username, password);
         if (error) setError(error);
       } else {
-        if (!/^atto:\/\/[a-z2-7]{61}$/.test(attoAddress)) {
-          setError("Enter a valid ATTO address (atto:// followed by 61 characters).");
+        if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+          setError(
+            "Username must be 3-20 letters, numbers or underscores.",
+          );
           setBusy(false);
           return;
         }
-        const { error } = await signUp(username, password, attoAddress);
+
+        if (!/^atto:\/\/[a-z2-7]{61}$/.test(attoAddress)) {
+          setError(
+            "Enter a valid ATTO address (atto:// followed by 61 characters).",
+          );
+          setBusy(false);
+          return;
+        }
+
+        const { error } = await signUp(
+          username,
+          password,
+          attoAddress,
+        );
+
         if (error) setError(error);
       }
     } finally {
@@ -47,66 +64,83 @@ export default function Auth() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-600 shadow-lg mb-4">
             <PawPrint className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-800 tracking-tight">ATTO Pets</h1>
-          <p className="text-slate-500 mt-1 text-sm">Collect, trade, and battle AI-generated pets on the ATTO network</p>
+
+          <h1 className="text-3xl font-bold text-slate-800 tracking-tight">
+            ATTO Pets
+          </h1>
+
+          <p className="text-slate-500 mt-1 text-sm">
+            Collect, trade, and battle AI-generated pets on the ATTO network
+          </p>
         </div>
 
         <div className="bg-white/90 backdrop-blur border border-slate-200 rounded-2xl shadow-xl p-6">
           <div className="flex gap-1 mb-6 bg-slate-100 rounded-lg p-1">
             <button
-              onClick={() => setMode("signin")}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${mode === "signin" ? "bg-sky-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+              type="button"
+              onClick={() => {
+                setMode("signin");
+                setError(null);
+              }}
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
+                mode === "signin"
+                  ? "bg-sky-600 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
             >
               Sign In
             </button>
+
             <button
-              onClick={() => setMode("signup")}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${mode === "signup" ? "bg-sky-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+              type="button"
+              onClick={() => {
+                setMode("signup");
+                setError(null);
+              }}
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
+                mode === "signup"
+                  ? "bg-sky-600 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
             >
               Create Account
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "signup" && (
-              <div>
-                <label className="block text-xs text-slate-500 mb-1 font-medium">Username</label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  minLength={3}
-                  maxLength={20}
-                  pattern="[a-zA-Z0-9_]+"
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
-                  placeholder="3-20 letters, numbers, underscores"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-xs text-slate-500 mb-1 font-medium">
+                Username
+              </label>
 
-            {mode === "signin" && (
-              <div>
-                <label className="block text-xs text-slate-500 mb-1 font-medium">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
-                  placeholder="you@example.com"
-                />
-              </div>
-            )}
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                minLength={3}
+                maxLength={20}
+                pattern="[a-zA-Z0-9_]+"
+                autoComplete="username"
+                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
+                placeholder="3-20 letters, numbers, underscores"
+              />
+            </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium">Password</label>
+              <label className="block text-xs text-slate-500 mb-1 font-medium">
+                Password
+              </label>
+
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
+                autoComplete={
+                  mode === "signin" ? "current-password" : "new-password"
+                }
                 className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
                 placeholder="At least 6 characters"
               />
@@ -116,9 +150,11 @@ export default function Auth() {
               <div>
                 <label className="block text-xs text-slate-500 mb-1 font-medium">
                   <span className="inline-flex items-center gap-1">
-                    <Wallet className="w-3 h-3" /> ATTO Wallet Address
+                    <Wallet className="w-3 h-3" />
+                    ATTO Wallet Address
                   </span>
                 </label>
+
                 <input
                   type="text"
                   value={attoAddress}
@@ -127,8 +163,10 @@ export default function Auth() {
                   className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
                   placeholder="atto://..."
                 />
+
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Your external ATTO wallet address. We never ask for your private key or seed phrase.
+                  Your external ATTO wallet address. We never ask for your
+                  private key or seed phrase.
                 </p>
               </div>
             )}
@@ -157,3 +195,4 @@ export default function Auth() {
     </div>
   );
 }
+```
