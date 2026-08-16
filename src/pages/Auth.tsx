@@ -1,7 +1,6 @@
-
 import { useState } from "react";
-import { useAuth } from "../lib/auth";
-import { Spinner } from "../lib/ui";
+import { useAuth } from "@/lib/auth";
+import { Spinner } from "@/lib/ui";
 import { PawPrint, Wallet } from "lucide-react";
 
 export default function Auth() {
@@ -20,9 +19,10 @@ export default function Auth() {
 
     try {
       if (mode === "signin") {
-        const { error } = await signIn(username, password);
-        if (error) {
-          setError(error);
+        const result = await signIn(username, password);
+
+        if (result.error) {
+          setError(result.error);
         }
       } else {
         if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
@@ -39,14 +39,14 @@ export default function Auth() {
           return;
         }
 
-        const { error } = await signUp(
+        const result = await signUp(
           username,
           password,
           attoAddress
         );
 
-        if (error) {
-          setError(error);
+        if (result.error) {
+          setError(result.error);
         }
       }
     } finally {
@@ -84,11 +84,11 @@ export default function Auth() {
                 setMode("signin");
                 setError(null);
               }}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
+              className={
                 mode === "signin"
-                  ? "bg-sky-600 text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
+                  ? "flex-1 py-2 rounded-md text-sm font-medium transition bg-sky-600 text-white shadow-sm"
+                  : "flex-1 py-2 rounded-md text-sm font-medium transition text-slate-500 hover:text-slate-800"
+              }
             >
               Sign In
             </button>
@@ -99,11 +99,11 @@ export default function Auth() {
                 setMode("signup");
                 setError(null);
               }}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
+              className={
                 mode === "signup"
-                  ? "bg-sky-600 text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
+                  ? "flex-1 py-2 rounded-md text-sm font-medium transition bg-sky-600 text-white shadow-sm"
+                  : "flex-1 py-2 rounded-md text-sm font-medium transition text-slate-500 hover:text-slate-800"
+              }
             >
               Create Account
             </button>
@@ -201,3 +201,5 @@ export default function Auth() {
     </div>
   );
 }
+
+
