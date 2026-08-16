@@ -1,7 +1,7 @@
 
 import { useState } from "react";
-import { useAuth } from "@/lib/auth";
-import { Spinner } from "@/lib/ui";
+import { useAuth } from "../lib/auth";
+import { Spinner } from "../lib/ui";
 import { PawPrint, Wallet } from "lucide-react";
 
 export default function Auth() {
