@@ -76,13 +76,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Username-based login.
   // Supabase Auth internally uses the same private email format
   // that the signup Edge Function creates.
-  const signIn = useCallback(async (username: string, password: string) => {
-    const email = `${username.trim().toLowerCase()}@atto-pets.local`;
+  
+const signIn = useCallback(async (username: string, password: string) => {
+  const cleanUsername = username.trim().toLowerCase();
+  const email = cleanUsername + "@atto-pets.local";
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email,
+    password: password,
+  });
+
+  return { error: error?.message ?? null };
+}, []);
 
     return { error: error?.message ?? null };
   }, []);
