@@ -1,4 +1,4 @@
-```tsx
+
 import {
   createContext,
   useContext,
@@ -59,21 +59,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+
     supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+
       setSession(data.session);
       setUser(data.session?.user ?? null);
 
       if (data.session?.user) {
         loadPlayer(data.session.user.id).finally(() => {
-          setLoading(false);
+          if (mounted) setLoading(false);
         });
       } else {
         setLoading(false);
       }
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange(
+    const { data: subscription } = supabase.auth.onAuthStateChange(
       (_event, sess) => {
+        if (!mounted) return;
+
         setSession(sess);
         setUser(sess?.user ?? null);
 
@@ -85,17 +91,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.subscription.unsubscribe();
+    };
   }, [loadPlayer]);
 
   const signIn = useCallback(
     async (username: string, password: string) => {
       const cleanUsername = username.trim().toLowerCase();
-      const email = cleanUsername + "@atto-pets.local";
+      const email = `${cleanUsername}@atto-pets.local`;
 
       const { error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
+        email,
+        password,
       });
 
       return {
@@ -113,46 +122,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ) => {
       const cleanUsername = username.trim();
 
-      const url =
-        import.meta.env.VITE_SUPABASE_URL +
-        "/functions/v1/signup";
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/signup`;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const anonKey =
-        import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      const res = await fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer " + anonKey,
+          Authorization: `Bearer ${anonKey}`,
         },
         body: JSON.stringify({
           username: cleanUsername,
-          password: password,
+          password,
           atto_address: attoAddress,
         }),
       });
 
-      const data = await res.json();
+      const data = await response.json();
 
-      if (!res.ok) {
+      if (!response.ok) {
         return {
           error: data.error ?? "Sign-up failed.",
         };
       }
 
-      const email =
-        cleanUsername.toLowerCase() +
-        "@atto-pets.local";
+      const email = `${cleanUsername.toLowerCase()}@atto-pets.local`;
 
-      const { error: loginErr } =
+      const { error: loginError } =
         await supabase.auth.signInWithPassword({
-          email: email,
-          password: password,
+          email,
+          password,
         });
 
       return {
-        error: loginErr?.message ?? null,
+        error: loginError?.message ?? null,
       };
     },
     []
@@ -161,6 +164,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setPlayer(null);
+    setUser(null);
+    setSession(null);
   }, []);
 
   const refreshPlayer = useCallback(async () => {
@@ -187,15 +192,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
+export function useAuth(): AuthState {
+  const context = useContext(AuthContext);
 
-  if (!ctx) {
-    throw new Error(
-      "useAuth must be used within AuthProvider"
-    );
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
   }
 
-  return ctx;
+  return context;
 }
-```
