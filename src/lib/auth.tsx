@@ -1,3 +1,4 @@
+
 import {
 createContext,
 useContext,
@@ -191,7 +192,7 @@ const cleanUsername = username.trim();
     try {
       data = JSON.parse(text);
     } catch {
-      // The server did not return JSON.
+      // Server did not return JSON.
     }
 
     if (!response.ok) {
@@ -282,9 +283,7 @@ export function useAuth(): AuthState {
 const context = useContext(AuthContext);
 
 if (!context) {
-throw new Error(
-"useAuth must be used within AuthProvider"
-);
+throw new Error("useAuth must be used within AuthProvider");
 }
 
 return context;
