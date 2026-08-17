@@ -10,7 +10,7 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-// 1 ATTO = 10^18 raw units.
+// 1 ATTO = 10^9 raw units.
 const RAW_PER_ATTO = 1_000_000_000n;
 
 // This is the live Gatekeeper endpoint used by the Atto Explorer.
@@ -111,8 +111,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // 1. Get transaction from the same Gatekeeper endpoint
-    //    used by the Atto Explorer.
+    // 1. Get transaction from the Gatekeeper endpoint.
     // ---------------------------------------------------------
 
     const url =
@@ -154,7 +153,6 @@ Deno.serve(async (req: Request) => {
       }, 502);
     }
 
-    // The Explorer endpoint returns NDJSON.
     const text = await readFirstJson(response);
 
     if (!text) {
@@ -168,7 +166,7 @@ Deno.serve(async (req: Request) => {
 
     try {
       tx = JSON.parse(text);
-    } catch (err) {
+    } catch {
       console.error(
         "Could not parse ATTO transaction:",
         text,
@@ -204,12 +202,6 @@ Deno.serve(async (req: Request) => {
 
     // ---------------------------------------------------------
     // 3. Get public keys.
-    //
-    // For a SEND:
-    // publicKey = sender
-    // subjectPublicKey = receiver
-    //
-    // This matches the Atto protocol's SEND structure.
     // ---------------------------------------------------------
 
     const senderPublicKey =
@@ -309,6 +301,10 @@ Deno.serve(async (req: Request) => {
     const requiredRaw =
       BigInt(egg.price) * RAW_PER_ATTO;
 
+    console.log("Payment amount raw:", amountRaw.toString());
+    console.log("Required amount raw:", requiredRaw.toString());
+    console.log("Payment amount ATTO:", formatAtto(amountRaw));
+
     if (amountRaw < requiredRaw) {
       return json({
         error:
@@ -331,9 +327,14 @@ Deno.serve(async (req: Request) => {
         });
 
     if (claimErr) {
+      console.error(
+        "Transaction claim error:",
+        claimErr,
+      );
+
+      // Duplicate transaction.
       if (
-        (claimErr as { code?: string }).code ===
-        "23505"
+        claimErr.code === "23505"
       ) {
         return json({
           error:
@@ -341,14 +342,15 @@ Deno.serve(async (req: Request) => {
         }, 409);
       }
 
-      console.error(
-        "Transaction claim error:",
-        claimErr,
-      );
-
+      // Return the real Supabase error so we can identify
+      // exactly what is wrong with the database table.
       return json({
         error:
-          "Could not record your payment. Try again.",
+          "Database error recording payment.",
+        details: claimErr.message,
+        code: claimErr.code,
+        hint: claimErr.hint ?? null,
+        database_details: claimErr.details ?? null,
       }, 500);
     }
 
@@ -376,6 +378,7 @@ Deno.serve(async (req: Request) => {
       return json({
         error:
           "Payment verified but the pet could not be created. Please contact support.",
+        details: petErr?.message ?? null,
       }, 500);
     }
 
@@ -422,15 +425,6 @@ Deno.serve(async (req: Request) => {
 
 // =============================================================
 // Convert an Atto public key to an Atto address.
-//
-// Atto V1 address:
-//   1 byte algorithm = 0
-//   32 byte public key
-//   5 byte BLAKE2b-40 checksum
-//   Base32 without padding
-//   "atto://" prefix
-//
-// This is the exact format documented by Atto.
 // =============================================================
 
 function publicKeyToAttoAddress(
@@ -627,7 +621,7 @@ function formatAtto(
   const fractionText =
     fraction
       .toString()
-      .padStart(18, "0")
+      .padStart(9, "0")
       .replace(/0+$/, "");
 
   return `${whole}.${fractionText}`;
