@@ -13,14 +13,19 @@ export default function MyPets() {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    supabase
+   supabase
   .from("pets")
   .select("*")
   .eq("owner_id", user.id)
   .order("created_at", { ascending: false })
   .then(({ data, error }) => {
+    console.log("LOGGED IN USER ID:", user.id);
     console.log("MY PETS DATA:", data);
     console.log("MY PETS ERROR:", error);
+
+    setPets((data ?? []) as Pet[]);
+    setLoading(false);
+  });
 
     setPets((data ?? []) as Pet[]);
     setLoading(false);
