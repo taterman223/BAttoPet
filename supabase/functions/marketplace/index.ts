@@ -11,9 +11,8 @@ const corsHeaders = {
 const RAW_PER_ATTO = 1_000_000_000_000_000_000n;
 
 Deno.serve(async (req: Request) => {
-  // Handle browser CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
+    return new Response(null, {
       status: 200,
       headers: corsHeaders,
     });
@@ -24,10 +23,6 @@ Deno.serve(async (req: Request) => {
       .replace("Bearer ", "")
       .trim();
 
-    if (!token) {
-      return json({ error: "You must be signed in." }, 401);
-    }
-
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -36,38 +31,42 @@ Deno.serve(async (req: Request) => {
     const { data: userData, error: authError } =
       await admin.auth.getUser(token);
 
-    if (authError || !userData?.user) {
-      return json({ error: "Your login session is invalid or expired." }, 401);
+    if (authError) {
+      console.error("AUTH ERROR:", authError);
+      return json(
+        {
+          error: "Authentication failed.",
+          details: authError.message,
+        },
+        401,
+      );
     }
 
-    const user = userData.user;
+    const user = userData?.user;
+
+    if (!user) {
+      return json(
+        {
+          error: "You must be signed in.",
+        },
+        401,
+      );
+    }
 
     const body = await req.json();
     const action = String(body?.action ?? "");
 
-    // ============================================================
+    // =========================================================
     // LIST PET
-    // ============================================================
+    // =========================================================
     if (action === "list") {
-      // Accept pet_id normally, but also accept id as a fallback.
-      const petId = String(
-        body?.pet_id ??
-        body?.id ??
-        "",
-      ).trim();
-
+      const petId = String(body?.pet_id ?? "").trim();
       const price = Number(body?.price);
-
-      console.log("MARKETPLACE LIST REQUEST");
-      console.log("User:", user.id);
-      console.log("Pet ID:", petId);
-      console.log("Price:", price);
 
       if (!petId) {
         return json(
           {
             error: "No pet ID was provided.",
-            received: body,
           },
           400,
         );
@@ -75,63 +74,86 @@ Deno.serve(async (req: Request) => {
 
       if (!Number.isFinite(price) || price <= 0) {
         return json(
-          { error: "Enter a valid price." },
+          {
+            error: "Enter a valid price.",
+          },
           400,
         );
       }
 
-      // Find the pet
-      const { data: pet, error: petError } = await admin
+      console.log("Looking for pet:", petId);
+      console.log("User:", user.id);
+
+      // Find the pet and return the REAL database error if something fails.
+      const {
+        data: pet,
+        error: petError,
+      } = await admin
         .from("pets")
         .select("*")
         .eq("id", petId)
         .maybeSingle();
 
-      console.log("PET LOOKUP:", pet);
-      console.log("PET LOOKUP ERROR:", petError);
-
       if (petError) {
+        console.error("PET DATABASE ERROR:", petError);
+
         return json(
           {
             error: "Database error while finding the pet.",
             details: petError.message,
+            code: petError.code,
+            hint: petError.hint,
+            pet_id_received: petId,
           },
           500,
         );
       }
 
       if (!pet) {
+        console.error("PET NOT FOUND:", petId);
+
         return json(
           {
             error: "Pet not found.",
             pet_id_received: petId,
-            user_id: user.id,
           },
           404,
         );
       }
 
+      console.log("Pet found:", pet);
+
+      // Check ownership
       if (pet.owner_id !== user.id) {
         return json(
-          { error: "You do not own this pet." },
+          {
+            error: "You do not own this pet.",
+          },
           403,
         );
       }
 
-      if (!pet.tradeable) {
+      // Check tradeable
+      if (pet.tradeable === false) {
         return json(
-          { error: "This pet cannot be traded." },
+          {
+            error: "This pet cannot be traded.",
+          },
           400,
         );
       }
 
-      if (pet.in_battle) {
+      // Check battle status
+      if (pet.in_battle === true) {
         return json(
-          { error: "This pet is currently in a battle." },
+          {
+            error: "This pet is currently in a battle.",
+          },
           400,
         );
       }
 
+      // Check battle lock
       if (
         pet.battle_locked_until &&
         new Date(pet.battle_locked_until) > new Date()
@@ -145,8 +167,11 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Check whether already listed
-      const { data: existing, error: existingError } = await admin
+      // Check if already listed
+      const {
+        data: existing,
+        error: existingError,
+      } = await admin
         .from("marketplace_listings")
         .select("id")
         .eq("pet_id", petId)
@@ -154,10 +179,14 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (existingError) {
+        console.error("EXISTING LISTING ERROR:", existingError);
+
         return json(
           {
-            error: "Could not check existing listings.",
+            error: "Database error while checking existing listings.",
             details: existingError.message,
+            code: existingError.code,
+            hint: existingError.hint,
           },
           500,
         );
@@ -165,13 +194,18 @@ Deno.serve(async (req: Request) => {
 
       if (existing) {
         return json(
-          { error: "This pet is already listed." },
+          {
+            error: "This pet is already listed.",
+          },
           409,
         );
       }
 
       // Create listing
-      const { data: listing, error: listingError } = await admin
+      const {
+        data: listing,
+        error: listingError,
+      } = await admin
         .from("marketplace_listings")
         .insert({
           seller_id: user.id,
@@ -188,6 +222,8 @@ Deno.serve(async (req: Request) => {
           {
             error: "Could not create the listing.",
             details: listingError.message,
+            code: listingError.code,
+            hint: listingError.hint,
           },
           500,
         );
@@ -199,42 +235,67 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // ============================================================
+    // =========================================================
     // CANCEL LISTING
-    // ============================================================
+    // =========================================================
     if (action === "cancel") {
       const listingId = String(body?.listing_id ?? "").trim();
 
       if (!listingId) {
         return json(
-          { error: "No listing ID was provided." },
+          {
+            error: "No listing ID was provided.",
+          },
           400,
         );
       }
 
-      const { data: listing } = await admin
+      const {
+        data: listing,
+        error: listingError,
+      } = await admin
         .from("marketplace_listings")
         .select("*")
         .eq("id", listingId)
         .maybeSingle();
 
+      if (listingError) {
+        console.error("LISTING LOOKUP ERROR:", listingError);
+
+        return json(
+          {
+            error: "Database error while finding the listing.",
+            details: listingError.message,
+            code: listingError.code,
+            hint: listingError.hint,
+          },
+          500,
+        );
+      }
+
       if (!listing) {
         return json(
-          { error: "Listing not found." },
+          {
+            error: "Listing not found.",
+          },
           404,
         );
       }
 
       if (listing.seller_id !== user.id) {
         return json(
-          { error: "This is not your listing." },
+          {
+            error: "This is not your listing.",
+          },
           403,
         );
       }
 
       if (listing.status !== "active") {
         return json(
-          { error: "This listing is no longer active." },
+          {
+            error: "This listing is no longer active.",
+          },
           400,
         );
       }
@@ -248,31 +309,38 @@ Deno.serve(async (req: Request) => {
         .eq("status", "active");
 
       if (error) {
+        console.error("CANCEL ERROR:", error);
+
         return json(
           {
             error: "Could not cancel the listing.",
             details: error.message,
+            code: error.code,
+            hint: error.hint,
           },
           500,
         );
       }
 
-      return json({ ok: true });
+      return json({
+        ok: true,
+      });
     }
 
-    // ============================================================
-    // BUY LISTING
-    // ============================================================
+    // =========================================================
+    // BUY
+    // =========================================================
     if (action === "buy") {
       const listingId = String(body?.listing_id ?? "").trim();
-
       const txHash = String(body?.tx_hash ?? "")
         .trim()
         .toUpperCase();
 
       if (!listingId) {
         return json(
-          { error: "No listing ID was provided." },
+          {
+            error: "No listing ID was provided.",
+          },
           400,
         );
       }
@@ -290,11 +358,18 @@ Deno.serve(async (req: Request) => {
       let nodeUrl = Deno.env.get("ATTO_NODE_URL");
 
       if (!nodeUrl) {
-        const { data: cfg } = await admin
+        const {
+          data: cfg,
+          error: cfgError,
+        } = await admin
           .from("game_config")
           .select("key, value")
           .eq("key", "atto_node_url")
           .maybeSingle();
+
+        if (cfgError) {
+          console.error("CONFIG ERROR:", cfgError);
+        }
 
         nodeUrl = cfg?.value ?? undefined;
       }
@@ -303,7 +378,7 @@ Deno.serve(async (req: Request) => {
         return json(
           {
             error:
-              "Marketplace purchases are not available yet: the game operator has not configured the ATTO node endpoint.",
+              "Marketplace purchases are not available yet: the game operator has not configured the ATTO node endpoint (ATTO_NODE_URL).",
             needs_config: true,
           },
           503,
@@ -312,15 +387,34 @@ Deno.serve(async (req: Request) => {
 
       const base = nodeUrl.replace(/\/$/, "");
 
-      const { data: listing } = await admin
+      const {
+        data: listing,
+        error: listingError,
+      } = await admin
         .from("marketplace_listings")
         .select("*")
         .eq("id", listingId)
         .maybeSingle();
 
+      if (listingError) {
+        console.error("BUY LISTING ERROR:", listingError);
+
+        return json(
+          {
+            error: "Database error while finding the listing.",
+            details: listingError.message,
+            code: listingError.code,
+            hint: listingError.hint,
+          },
+          500,
+        );
+      }
+
       if (!listing) {
         return json(
-          { error: "Listing not found." },
+          {
+            error: "Listing not found.",
+          },
           404,
         );
       }
@@ -337,31 +431,69 @@ Deno.serve(async (req: Request) => {
 
       if (listing.seller_id === user.id) {
         return json(
-          { error: "You cannot buy your own listing." },
+          {
+            error: "You cannot buy your own listing.",
+          },
           400,
         );
       }
 
-      const { data: buyer } = await admin
+      const {
+        data: buyer,
+        error: buyerError,
+      } = await admin
         .from("players")
         .select("atto_address")
         .eq("id", user.id)
         .maybeSingle();
 
-      const { data: seller } = await admin
+      if (buyerError) {
+        console.error("BUYER LOOKUP ERROR:", buyerError);
+
+        return json(
+          {
+            error: "Database error while finding the buyer.",
+            details: buyerError.message,
+            code: buyerError.code,
+            hint: buyerError.hint,
+          },
+          500,
+        );
+      }
+
+      const {
+        data: seller,
+        error: sellerError,
+      } = await admin
         .from("players")
         .select("atto_address")
         .eq("id", listing.seller_id)
         .maybeSingle();
 
+      if (sellerError) {
+        console.error("SELLER LOOKUP ERROR:", sellerError);
+
+        return json(
+          {
+            error: "Database error while finding the seller.",
+            details: sellerError.message,
+            code: sellerError.code,
+            hint: sellerError.hint,
+          },
+          500,
+        );
+      }
+
       if (!buyer || !seller) {
         return json(
-          { error: "Player records not found." },
+          {
+            error: "Player records not found.",
+          },
           404,
         );
       }
 
-      // Verify payment on ATTO network
+      // Verify payment on the ATTO network
       let txRes: Response;
 
       try {
@@ -409,8 +541,7 @@ Deno.serve(async (req: Request) => {
       if (!block || block.type !== "SEND") {
         return json(
           {
-            error:
-              "That transaction is not a payment.",
+            error: "That transaction is not a payment.",
           },
           400,
         );
@@ -436,10 +567,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      if (
-        block.receiverAddress !==
-        seller.atto_address
-      ) {
+      if (block.receiverAddress !== seller.atto_address) {
         return json(
           {
             error:
@@ -456,8 +584,7 @@ Deno.serve(async (req: Request) => {
       } catch {
         return json(
           {
-            error:
-              "Amount could not be read.",
+            error: "Amount could not be read.",
           },
           502,
         );
@@ -478,7 +605,9 @@ Deno.serve(async (req: Request) => {
       }
 
       // Prevent transaction replay
-      const { error: claimErr } = await admin
+      const {
+        error: claimErr,
+      } = await admin
         .from("used_transaction_hashes")
         .insert({
           hash: txHash,
@@ -501,30 +630,53 @@ Deno.serve(async (req: Request) => {
           );
         }
 
+        console.error(
+          "TRANSACTION CLAIM ERROR:",
+          claimErr,
+        );
+
         return json(
           {
-            error:
-              "Could not record the payment.",
+            error: "Could not record the payment.",
+            details: claimErr.message,
+            code: claimErr.code,
+            hint: claimErr.hint,
           },
           500,
         );
       }
 
-      // Mark listing as sold
-      const { data: sold, error: soldErr } =
-        await admin
-          .from("marketplace_listings")
-          .update({
-            status: "sold",
-            buyer_id: user.id,
-            sold_at: new Date().toISOString(),
-          })
-          .eq("id", listingId)
-          .eq("status", "active")
-          .select()
-          .maybeSingle();
+      // Atomically mark listing as sold
+      const {
+        data: sold,
+        error: soldErr,
+      } = await admin
+        .from("marketplace_listings")
+        .update({
+          status: "sold",
+          buyer_id: user.id,
+          sold_at: new Date().toISOString(),
+        })
+        .eq("id", listingId)
+        .eq("status", "active")
+        .select()
+        .maybeSingle();
 
-      if (soldErr || !sold) {
+      if (soldErr) {
+        console.error("MARK SOLD ERROR:", soldErr);
+
+        return json(
+          {
+            error: "Could not complete the purchase.",
+            details: soldErr.message,
+            code: soldErr.code,
+            hint: soldErr.hint,
+          },
+          500,
+        );
+      }
+
+      if (!sold) {
         return json(
           {
             error:
@@ -534,8 +686,9 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Transfer pet
-      await admin
+      const {
+        error: transferError,
+      } = await admin
         .from("pets")
         .update({
           owner_id: user.id,
@@ -543,11 +696,33 @@ Deno.serve(async (req: Request) => {
         })
         .eq("id", listing.pet_id);
 
-      return json({ ok: true });
+      if (transferError) {
+        console.error(
+          "PET TRANSFER ERROR:",
+          transferError,
+        );
+
+        return json(
+          {
+            error:
+              "Payment succeeded but pet ownership could not be transferred.",
+            details: transferError.message,
+            code: transferError.code,
+            hint: transferError.hint,
+          },
+          500,
+        );
+      }
+
+      return json({
+        ok: true,
+      });
     }
 
     return json(
-      { error: "Unknown action." },
+      {
+        error: "Unknown action.",
+      },
       400,
     );
   } catch (err) {
@@ -555,10 +730,7 @@ Deno.serve(async (req: Request) => {
 
     return json(
       {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Unknown server error.",
+        error: (err as Error).message,
       },
       500,
     );
