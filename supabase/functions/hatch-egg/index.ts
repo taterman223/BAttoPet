@@ -11,7 +11,7 @@ const corsHeaders = {
 };
 
 // 1 ATTO = 10^18 raw units.
-const RAW_PER_ATTO = 1_000_000_000_000_000_000n;
+const RAW_PER_ATTO = 1_000_000_000n;
 
 // This is the live Gatekeeper endpoint used by the Atto Explorer.
 const ATTO_GATEKEEPER =
