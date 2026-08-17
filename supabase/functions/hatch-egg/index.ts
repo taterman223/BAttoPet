@@ -7,10 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-// 1 ATTO = 10^18 raw units.
 const RAW_PER_ATTO = 1_000_000_000_000_000_000n;
 
-// The public Gatekeeper endpoint used by the Atto Explorer.
+// This is the live Gatekeeper endpoint used by the Atto Explorer.
 const ATTO_GATEKEEPER =
   "https://gatekeeper.live.application.atto.cash";
 
@@ -40,14 +39,11 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Authenticate the player.
     const { data: userData } = await admin.auth.getUser(token);
     const user = userData?.user;
 
     if (!user) {
-      return json({
-        error: "You must be signed in.",
-      }, 401);
+      return json({ error: "You must be signed in." }, 401);
     }
 
     const body = await req.json();
@@ -60,9 +56,7 @@ Deno.serve(async (req: Request) => {
     const egg = EGGS[eggType];
 
     if (!egg) {
-      return json({
-        error: "Unknown egg type.",
-      }, 400);
+      return json({ error: "Unknown egg type." }, 400);
     }
 
     if (!/^[0-9A-F]{64}$/.test(txHash)) {
@@ -71,7 +65,6 @@ Deno.serve(async (req: Request) => {
       }, 400);
     }
 
-    // Treasury is still kept as a Supabase secret.
     const treasury = Deno.env.get("ATTO_TREASURY_ADDRESS");
 
     if (!treasury) {
@@ -81,7 +74,6 @@ Deno.serve(async (req: Request) => {
       }, 503);
     }
 
-    // Get the player.
     const { data: player } = await admin
       .from("players")
       .select("id, atto_address")
@@ -95,17 +87,17 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // 1. Find the transaction through the same Gatekeeper
-    //    endpoint used by the Atto Explorer.
+    // Get the transaction from the same Gatekeeper endpoint
+    // used by the Atto Explorer.
     // ---------------------------------------------------------
 
-    const entryUrl =
+    const url =
       `${ATTO_GATEKEEPER}/accounts/entries/${txHash}/stream`;
 
-    let entryRes: Response;
+    let response: Response;
 
     try {
-      entryRes = await fetch(entryUrl, {
+      response = await fetch(url, {
         method: "GET",
         headers: {
           Accept: "application/x-ndjson, application/json",
@@ -115,26 +107,27 @@ Deno.serve(async (req: Request) => {
       console.error("Gatekeeper request failed:", err);
 
       return json({
-        error: "Could not reach the ATTO Explorer network. Try again shortly.",
+        error: "Could not reach the ATTO network to verify your payment.",
       }, 502);
     }
 
-    if (!entryRes.ok) {
-      if (entryRes.status === 404) {
+    if (!response.ok) {
+      if (response.status === 404) {
         return json({
-          error: "That transaction was not found on the ATTO network yet. Wait for it to confirm and try again.",
+          error:
+            "That transaction was not found on the ATTO network yet. Wait for it to confirm and try again.",
         }, 404);
       }
 
       return json({
-        error: `The ATTO Explorer network returned an error (${entryRes.status}).`,
+        error:
+          `The ATTO network returned an error (${response.status}) while verifying your payment.`,
       }, 502);
     }
 
-    // The endpoint is NDJSON, so read the first JSON object.
-    const entryText = await readFirstJsonObject(entryRes);
+    const text = await readFirstJson(response);
 
-    if (!entryText) {
+    if (!text) {
       return json({
         error: "The ATTO transaction response was empty.",
       }, 502);
@@ -143,17 +136,19 @@ Deno.serve(async (req: Request) => {
     let entry: any;
 
     try {
-      entry = JSON.parse(entryText);
-    } catch (err) {
-      console.error("Could not parse Gatekeeper response:", entryText);
+      entry = JSON.parse(text);
+    } catch {
+      console.error("Invalid Gatekeeper response:", text);
 
       return json({
         error: "The ATTO transaction response could not be read.",
       }, 502);
     }
 
-    // Make sure the returned hash is the hash the player submitted.
-    if (String(entry?.hash ?? "").toUpperCase() !== txHash) {
+    // Make sure this is the requested transaction.
+    if (
+      String(entry?.hash ?? "").toUpperCase() !== txHash
+    ) {
       return json({
         error: "The returned transaction does not match the submitted hash.",
       }, 400);
@@ -166,51 +161,65 @@ Deno.serve(async (req: Request) => {
       }, 400);
     }
 
-    // The Gatekeeper hostname is the LIVE network endpoint.
-    // The Explorer response itself does not need a separate network field.
-
     // ---------------------------------------------------------
-    // 2. Get sender and receiver addresses from their public keys.
+    // The Explorer response can provide the addresses directly.
+    //
+    // address = sender
+    // subjectAddress = receiver
+    //
+    // If the Gatekeeper doesn't include them, use the public
+    // keys to query the account endpoint.
     // ---------------------------------------------------------
 
-    const senderPublicKey = String(entry?.publicKey ?? "").toUpperCase();
-    const receiverPublicKey =
-      String(entry?.subjectPublicKey ?? "").toUpperCase();
+    let senderAddress = entry?.address;
+    let receiverAddress = entry?.subjectAddress;
 
-    if (!/^[0-9A-F]{64}$/.test(senderPublicKey)) {
-      return json({
-        error: "The transaction sender public key is invalid.",
-      }, 502);
+    if (!senderAddress || !receiverAddress) {
+      const senderPublicKey =
+        String(entry?.publicKey ?? "").toUpperCase();
+
+      const receiverPublicKey =
+        String(entry?.subjectPublicKey ?? "").toUpperCase();
+
+      if (!/^[0-9A-F]{64}$/.test(senderPublicKey)) {
+        return json({
+          error: "The transaction sender public key is invalid.",
+        }, 502);
+      }
+
+      if (!/^[0-9A-F]{64}$/.test(receiverPublicKey)) {
+        return json({
+          error: "The transaction receiver public key is invalid.",
+        }, 502);
+      }
+
+      const [senderAccount, receiverAccount] =
+        await Promise.all([
+          getAccount(senderPublicKey),
+          getAccount(receiverPublicKey),
+        ]);
+
+      senderAddress =
+        senderAccount?.address ?? senderAccount?.representativeAddress;
+
+      receiverAddress =
+        receiverAccount?.address ?? receiverAccount?.representativeAddress;
     }
 
-    if (!/^[0-9A-F]{64}$/.test(receiverPublicKey)) {
-      return json({
-        error: "The transaction receiver public key is invalid.",
-      }, 502);
-    }
-
-    const [senderAccount, receiverAccount] = await Promise.all([
-      getAccountFromPublicKey(senderPublicKey),
-      getAccountFromPublicKey(receiverPublicKey),
-    ]);
-
-    if (!senderAccount?.address) {
+    if (!senderAddress) {
       return json({
         error: "Could not determine the sender ATTO address.",
       }, 502);
     }
 
-    if (!receiverAccount?.address) {
+    if (!receiverAddress) {
       return json({
         error: "Could not determine the receiver ATTO address.",
       }, 502);
     }
 
-    const senderAddress = String(senderAccount.address);
-    const receiverAddress = String(receiverAccount.address);
-
     // ---------------------------------------------------------
-    // 3. Verify sender.
+    // Verify sender.
     // ---------------------------------------------------------
 
     if (senderAddress !== player.atto_address) {
@@ -221,7 +230,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // 4. Verify treasury recipient.
+    // Verify treasury.
     // ---------------------------------------------------------
 
     if (receiverAddress !== treasury) {
@@ -232,9 +241,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // 5. Calculate payment amount.
+    // Calculate amount.
+    // For a SEND:
     //
-    // For a SEND account entry:
     // amount = previousBalance - balance
     // ---------------------------------------------------------
 
@@ -257,7 +266,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const amountRaw = previousBalance - balance;
-    const requiredRaw = BigInt(egg.price) * RAW_PER_ATTO;
+    const requiredRaw =
+      BigInt(egg.price) * RAW_PER_ATTO;
 
     if (amountRaw < requiredRaw) {
       return json({
@@ -267,7 +277,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // 6. Replay protection.
+    // Prevent transaction from being redeemed twice.
     // ---------------------------------------------------------
 
     const { error: claimErr } = await admin
@@ -280,7 +290,9 @@ Deno.serve(async (req: Request) => {
       });
 
     if (claimErr) {
-      if ((claimErr as { code?: string }).code === "23505") {
+      if (
+        (claimErr as { code?: string }).code === "23505"
+      ) {
         return json({
           error: "This transaction has already been redeemed.",
         }, 409);
@@ -294,16 +306,14 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // 7. Generate the pet.
+    // Generate pet.
     // ---------------------------------------------------------
 
-    const { data: pet, error: petErr } = await admin.rpc(
-      "generate_pet",
-      {
+    const { data: pet, error: petErr } =
+      await admin.rpc("generate_pet", {
         p_owner: player.id,
         p_tier: egg.tier,
-      },
-    );
+      });
 
     if (petErr || !pet) {
       console.error("Pet generation error:", petErr);
@@ -315,7 +325,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // 8. Record purchase.
+    // Record purchase.
     // ---------------------------------------------------------
 
     const { error: purchaseErr } = await admin
@@ -328,13 +338,9 @@ Deno.serve(async (req: Request) => {
       });
 
     if (purchaseErr) {
-      console.error("Purchase record error:", purchaseErr);
-
-      // The pet has already been awarded, so don't tell the
-      // player payment verification failed.
       console.error(
-        "WARNING: pet was created but purchase record failed:",
-        txHash,
+        "Purchase record error:",
+        purchaseErr,
       );
     }
 
@@ -347,16 +353,19 @@ Deno.serve(async (req: Request) => {
     console.error("Hatch egg error:", err);
 
     return json({
-      error: err instanceof Error ? err.message : String(err),
+      error:
+        err instanceof Error
+          ? err.message
+          : String(err),
     }, 500);
   }
 });
 
 // -------------------------------------------------------------
-// Read the first JSON object from an NDJSON response.
+// Read first JSON object from NDJSON.
 // -------------------------------------------------------------
 
-async function readFirstJsonObject(
+async function readFirstJson(
   response: Response,
 ): Promise<string | null> {
   if (!response.body) {
@@ -370,11 +379,10 @@ async function readFirstJsonObject(
 
   try {
     while (true) {
-      const { value, done } = await reader.read();
+      const { value, done } =
+        await reader.read();
 
-      if (done) {
-        break;
-      }
+      if (done) break;
 
       buffer += decoder.decode(value, {
         stream: true,
@@ -382,20 +390,21 @@ async function readFirstJsonObject(
 
       const lines = buffer.split("\n");
 
-      // Keep the unfinished line.
       buffer = lines.pop() ?? "";
 
       for (const line of lines) {
         const trimmed = line.trim();
 
-        if (trimmed) {
-          try {
-            JSON.parse(trimmed);
-            await reader.cancel();
-            return trimmed;
-          } catch {
-            // Keep reading if this wasn't a complete JSON object.
-          }
+        if (!trimmed) continue;
+
+        try {
+          JSON.parse(trimmed);
+
+          await reader.cancel();
+
+          return trimmed;
+        } catch {
+          // Continue reading.
         }
       }
     }
@@ -416,16 +425,16 @@ async function readFirstJsonObject(
     try {
       reader.releaseLock();
     } catch {
-      // Ignore reader cleanup errors.
+      // Ignore cleanup errors.
     }
   }
 }
 
 // -------------------------------------------------------------
-// Query the Gatekeeper account endpoint for an address.
+// Get an account from its public key.
 // -------------------------------------------------------------
 
-async function getAccountFromPublicKey(
+async function getAccount(
   publicKey: string,
 ): Promise<any> {
   const url =
@@ -443,12 +452,11 @@ async function getAccountFromPublicKey(
   } catch (err) {
     console.error(
       "Account lookup failed:",
-      publicKey,
       err,
     );
 
     throw new Error(
-      "Could not reach the ATTO network while resolving an account address.",
+      "Could not reach the ATTO network while resolving an account.",
     );
   }
 
@@ -458,7 +466,7 @@ async function getAccountFromPublicKey(
     );
   }
 
-  const text = await readFirstJsonObject(response);
+  const text = await readFirstJson(response);
 
   if (!text) {
     throw new Error(
@@ -491,7 +499,10 @@ function formatAtto(raw: bigint): string {
   return `${whole}.${fractionText}`;
 }
 
-function json(body: unknown, status = 200) {
+function json(
+  body: unknown,
+  status = 200,
+) {
   return new Response(
     JSON.stringify(body),
     {
