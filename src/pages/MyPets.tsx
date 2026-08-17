@@ -13,11 +13,18 @@ export default function MyPets() {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    supabase.from("pets").select("*").eq("owner_id", user.id).order("created_at", { ascending: false })
-      .then(({ data }) => {
-        setPets((data ?? []) as Pet[]);
-        setLoading(false);
-      });
+    supabase
+  .from("pets")
+  .select("*")
+  .eq("owner_id", user.id)
+  .order("created_at", { ascending: false })
+  .then(({ data, error }) => {
+    console.log("MY PETS DATA:", data);
+    console.log("MY PETS ERROR:", error);
+
+    setPets((data ?? []) as Pet[]);
+    setLoading(false);
+  });
 
     const channel = supabase.channel("my-pets")
       .on("postgres_changes", { event: "*", schema: "public", table: "pets", filter: `owner_id=eq.${user.id}` },
