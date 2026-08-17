@@ -48,24 +48,11 @@ Deno.serve(async (req: Request) => {
     }
 
     // Read config: prefer env secrets, fall back to game_config table.
-    let treasury = Deno.env.get("ATTO_TREASURY_ADDRESS");
-    let nodeUrl = Deno.env.get("ATTO_NODE_URL");
-    if (!treasury || !nodeUrl) {
-      const { data: cfg } = await admin.from("game_config").select("key, value").in("key", ["atto_treasury_address", "atto_node_url"]);
-      for (const row of cfg ?? []) {
-        if (row.key === "atto_treasury_address") treasury = treasury ?? row.value;
-        if (row.key === "atto_node_url") nodeUrl = nodeUrl ?? row.value;
-      }
-    }
+    const treasury = Deno.env.get("ATTO_TREASURY_ADDRESS");
+
     if (!treasury) {
       return json({
         error: "Egg purchases are not available yet: the game operator has not configured the ATTO treasury address (ATTO_TREASURY_ADDRESS).",
-        needs_config: true,
-      }, 503);
-    }
-    if (!nodeUrl) {
-      return json({
-        error: "Egg purchases are not available yet: the game operator has not configured the ATTO node endpoint (ATTO_NODE_URL).",
         needs_config: true,
       }, 503);
     }
@@ -79,13 +66,34 @@ Deno.serve(async (req: Request) => {
 
     // --- Independently query the real ATTO network for this transaction ---
     let txRes: Response;
+
     try {
-      txRes = await fetch(`${nodeUrl.replace(/\/$/, "")}/transactions/${txHash}`, {
-        headers: { Accept: "application/json" },
-      });
-    } catch {
-      return json({ error: "Could not reach the ATTO network to verify your payment. Try again shortly." }, 502);
+      const ATTO_NODE_URL = Deno.env.get("ATTO_NODE_URL");
+
+      if (!ATTO_NODE_URL) {
+        return json({
+          error: "ATTO transaction verification is not configured yet.",
+          needs_config: true,
+        }, 503);
+      }
+
+      txRes = await fetch(
+        `${ATTO_NODE_URL.replace(/\/$/, "")}/transactions/${txHash}`,
+        {
+          method: "GET",
+          headers: {
+            "Accept": "application/json",
+          },
+        },
+      );
+    } catch (err) {
+      console.error("ATTO transaction lookup failed:", err);
+
+      return json({
+        error: "Could not reach the ATTO network to verify your payment. Try again shortly.",
+      }, 502);
     }
+
     if (txRes.status === 404) {
       return json({ error: "That transaction was not found on the ATTO network yet. Wait for it to confirm and try again." }, 404);
     }
