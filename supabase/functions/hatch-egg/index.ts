@@ -1,12 +1,16 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { blake2b } from "jsr:@noble/hashes/blake2.js";
+import { encodeBase32 } from "jsr:@std/encoding/base32";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+// 1 ATTO = 10^18 raw units.
 const RAW_PER_ATTO = 1_000_000_000_000_000_000n;
 
 // This is the live Gatekeeper endpoint used by the Atto Explorer.
@@ -39,16 +43,22 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: userData } = await admin.auth.getUser(token);
+    // Authenticate player.
+    const { data: userData } =
+      await admin.auth.getUser(token);
+
     const user = userData?.user;
 
     if (!user) {
-      return json({ error: "You must be signed in." }, 401);
+      return json({
+        error: "You must be signed in.",
+      }, 401);
     }
 
     const body = await req.json();
 
     const eggType = String(body?.egg_type ?? "");
+
     const txHash = String(body?.tx_hash ?? "")
       .trim()
       .toUpperCase();
@@ -56,24 +66,31 @@ Deno.serve(async (req: Request) => {
     const egg = EGGS[eggType];
 
     if (!egg) {
-      return json({ error: "Unknown egg type." }, 400);
+      return json({
+        error: "Unknown egg type.",
+      }, 400);
     }
 
     if (!/^[0-9A-F]{64}$/.test(txHash)) {
       return json({
-        error: "Enter a valid 64-character transaction hash.",
+        error:
+          "Enter a valid 64-character transaction hash.",
       }, 400);
     }
 
-    const treasury = Deno.env.get("ATTO_TREASURY_ADDRESS");
+    // Treasury is stored as a Supabase secret.
+    const treasury =
+      Deno.env.get("ATTO_TREASURY_ADDRESS")?.trim();
 
     if (!treasury) {
       return json({
-        error: "ATTO treasury address is not configured.",
+        error:
+          "ATTO treasury address is not configured.",
         needs_config: true,
       }, 503);
     }
 
+    // Get player wallet.
     const { data: player } = await admin
       .from("players")
       .select("id, atto_address")
@@ -86,9 +103,16 @@ Deno.serve(async (req: Request) => {
       }, 404);
     }
 
+    if (!player.atto_address) {
+      return json({
+        error:
+          "Your ATTO wallet address is not configured.",
+      }, 400);
+    }
+
     // ---------------------------------------------------------
-    // Get the transaction from the same Gatekeeper endpoint
-    // used by the Atto Explorer.
+    // 1. Get transaction from the same Gatekeeper endpoint
+    //    used by the Atto Explorer.
     // ---------------------------------------------------------
 
     const url =
@@ -100,14 +124,19 @@ Deno.serve(async (req: Request) => {
       response = await fetch(url, {
         method: "GET",
         headers: {
-          Accept: "application/x-ndjson, application/json",
+          Accept:
+            "application/x-ndjson, application/json",
         },
       });
     } catch (err) {
-      console.error("Gatekeeper request failed:", err);
+      console.error(
+        "ATTO Gatekeeper request failed:",
+        err,
+      );
 
       return json({
-        error: "Could not reach the ATTO network to verify your payment.",
+        error:
+          "Could not reach the ATTO network to verify your payment.",
       }, 502);
     }
 
@@ -125,104 +154,108 @@ Deno.serve(async (req: Request) => {
       }, 502);
     }
 
+    // The Explorer endpoint returns NDJSON.
     const text = await readFirstJson(response);
 
     if (!text) {
       return json({
-        error: "The ATTO transaction response was empty.",
+        error:
+          "The ATTO transaction response was empty.",
       }, 502);
     }
 
-    let entry: any;
+    let tx: any;
 
     try {
-      entry = JSON.parse(text);
-    } catch {
-      console.error("Invalid Gatekeeper response:", text);
+      tx = JSON.parse(text);
+    } catch (err) {
+      console.error(
+        "Could not parse ATTO transaction:",
+        text,
+      );
 
       return json({
-        error: "The ATTO transaction response could not be read.",
+        error:
+          "The ATTO transaction response could not be read.",
       }, 502);
     }
 
-    // Make sure this is the requested transaction.
+    // ---------------------------------------------------------
+    // 2. Verify transaction hash.
+    // ---------------------------------------------------------
+
     if (
-      String(entry?.hash ?? "").toUpperCase() !== txHash
+      String(tx?.hash ?? "").toUpperCase() !==
+      txHash
     ) {
       return json({
-        error: "The returned transaction does not match the submitted hash.",
+        error:
+          "The returned transaction does not match the submitted hash.",
       }, 400);
     }
 
-    // Must be a SEND.
-    if (entry?.blockType !== "SEND") {
+    // Must be SEND.
+    if (tx?.blockType !== "SEND") {
       return json({
-        error: "That transaction is not a payment (send) transaction.",
+        error:
+          "That transaction is not a payment (SEND) transaction.",
       }, 400);
     }
 
     // ---------------------------------------------------------
-    // The Explorer response can provide the addresses directly.
+    // 3. Get public keys.
     //
-    // address = sender
-    // subjectAddress = receiver
+    // For a SEND:
+    // publicKey = sender
+    // subjectPublicKey = receiver
     //
-    // If the Gatekeeper doesn't include them, use the public
-    // keys to query the account endpoint.
+    // This matches the Atto protocol's SEND structure.
     // ---------------------------------------------------------
 
-    let senderAddress = entry?.address;
-    let receiverAddress = entry?.subjectAddress;
+    const senderPublicKey =
+      String(tx?.publicKey ?? "").toUpperCase();
 
-    if (!senderAddress || !receiverAddress) {
-      const senderPublicKey =
-        String(entry?.publicKey ?? "").toUpperCase();
+    const receiverPublicKey =
+      String(tx?.subjectPublicKey ?? "").toUpperCase();
 
-      const receiverPublicKey =
-        String(entry?.subjectPublicKey ?? "").toUpperCase();
-
-      if (!/^[0-9A-F]{64}$/.test(senderPublicKey)) {
-        return json({
-          error: "The transaction sender public key is invalid.",
-        }, 502);
-      }
-
-      if (!/^[0-9A-F]{64}$/.test(receiverPublicKey)) {
-        return json({
-          error: "The transaction receiver public key is invalid.",
-        }, 502);
-      }
-
-      const [senderAccount, receiverAccount] =
-        await Promise.all([
-          getAccount(senderPublicKey),
-          getAccount(receiverPublicKey),
-        ]);
-
-      senderAddress =
-        senderAccount?.address ?? senderAccount?.representativeAddress;
-
-      receiverAddress =
-        receiverAccount?.address ?? receiverAccount?.representativeAddress;
-    }
-
-    if (!senderAddress) {
+    if (!/^[0-9A-F]{64}$/.test(senderPublicKey)) {
       return json({
-        error: "Could not determine the sender ATTO address.",
+        error:
+          "The transaction sender public key is invalid.",
       }, 502);
     }
 
-    if (!receiverAddress) {
+    if (!/^[0-9A-F]{64}$/.test(receiverPublicKey)) {
       return json({
-        error: "Could not determine the receiver ATTO address.",
+        error:
+          "The transaction receiver public key is invalid.",
       }, 502);
     }
 
     // ---------------------------------------------------------
-    // Verify sender.
+    // 4. Derive the actual Atto addresses.
     // ---------------------------------------------------------
 
-    if (senderAddress !== player.atto_address) {
+    const senderAddress =
+      publicKeyToAttoAddress(senderPublicKey);
+
+    const receiverAddress =
+      publicKeyToAttoAddress(receiverPublicKey);
+
+    console.log("ATTO payment verification:");
+    console.log("Sender:", senderAddress);
+    console.log("Receiver:", receiverAddress);
+    console.log("Expected player:", player.atto_address);
+    console.log("Expected treasury:", treasury);
+
+    // ---------------------------------------------------------
+    // 5. Verify sender.
+    // ---------------------------------------------------------
+
+    if (
+      senderAddress.toLowerCase() !==
+      String(player.atto_address).trim().toLowerCase()
+    ) {
       return json({
         error:
           "The payment was not sent from the ATTO address registered to your account.",
@@ -230,10 +263,13 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // Verify treasury.
+    // 6. Verify treasury recipient.
     // ---------------------------------------------------------
 
-    if (receiverAddress !== treasury) {
+    if (
+      receiverAddress.toLowerCase() !==
+      treasury.toLowerCase()
+    ) {
       return json({
         error:
           "The payment was not sent to the official ATTO Pets address.",
@@ -241,31 +277,35 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // Calculate amount.
-    // For a SEND:
+    // 7. Calculate payment amount.
     //
-    // amount = previousBalance - balance
+    // SEND:
+    // previousBalance - balance = amount sent
     // ---------------------------------------------------------
 
     let previousBalance: bigint;
     let balance: bigint;
 
     try {
-      previousBalance = BigInt(entry.previousBalance);
-      balance = BigInt(entry.balance);
+      previousBalance = BigInt(tx.previousBalance);
+      balance = BigInt(tx.balance);
     } catch {
       return json({
-        error: "The transaction balance could not be read.",
+        error:
+          "The transaction balance could not be read.",
       }, 502);
     }
 
     if (previousBalance < balance) {
       return json({
-        error: "The transaction balance data is invalid.",
+        error:
+          "The transaction balance data is invalid.",
       }, 502);
     }
 
-    const amountRaw = previousBalance - balance;
+    const amountRaw =
+      previousBalance - balance;
+
     const requiredRaw =
       BigInt(egg.price) * RAW_PER_ATTO;
 
@@ -277,46 +317,61 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // Prevent transaction from being redeemed twice.
+    // 8. Replay protection.
     // ---------------------------------------------------------
 
-    const { error: claimErr } = await admin
-      .from("used_transaction_hashes")
-      .insert({
-        hash: txHash,
-        player_id: player.id,
-        egg_type: eggType,
-        amount: egg.price,
-      });
+    const { error: claimErr } =
+      await admin
+        .from("used_transaction_hashes")
+        .insert({
+          hash: txHash,
+          player_id: player.id,
+          egg_type: eggType,
+          amount: egg.price,
+        });
 
     if (claimErr) {
       if (
-        (claimErr as { code?: string }).code === "23505"
+        (claimErr as { code?: string }).code ===
+        "23505"
       ) {
         return json({
-          error: "This transaction has already been redeemed.",
+          error:
+            "This transaction has already been redeemed.",
         }, 409);
       }
 
-      console.error("Transaction claim error:", claimErr);
+      console.error(
+        "Transaction claim error:",
+        claimErr,
+      );
 
       return json({
-        error: "Could not record your payment. Try again.",
+        error:
+          "Could not record your payment. Try again.",
       }, 500);
     }
 
     // ---------------------------------------------------------
-    // Generate pet.
+    // 9. Generate pet.
     // ---------------------------------------------------------
 
-    const { data: pet, error: petErr } =
-      await admin.rpc("generate_pet", {
+    const {
+      data: pet,
+      error: petErr,
+    } = await admin.rpc(
+      "generate_pet",
+      {
         p_owner: player.id,
         p_tier: egg.tier,
-      });
+      },
+    );
 
     if (petErr || !pet) {
-      console.error("Pet generation error:", petErr);
+      console.error(
+        "Pet generation error:",
+        petErr,
+      );
 
       return json({
         error:
@@ -325,17 +380,18 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---------------------------------------------------------
-    // Record purchase.
+    // 10. Record purchase.
     // ---------------------------------------------------------
 
-    const { error: purchaseErr } = await admin
-      .from("purchases")
-      .insert({
-        player_id: player.id,
-        tx_hash: txHash,
-        egg_type: eggType,
-        pet_id: pet.id,
-      });
+    const { error: purchaseErr } =
+      await admin
+        .from("purchases")
+        .insert({
+          player_id: player.id,
+          tx_hash: txHash,
+          egg_type: eggType,
+          pet_id: pet.id,
+        });
 
     if (purchaseErr) {
       console.error(
@@ -350,7 +406,10 @@ Deno.serve(async (req: Request) => {
     });
 
   } catch (err) {
-    console.error("Hatch egg error:", err);
+    console.error(
+      "Hatch egg error:",
+      err,
+    );
 
     return json({
       error:
@@ -361,9 +420,112 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-// -------------------------------------------------------------
-// Read first JSON object from NDJSON.
-// -------------------------------------------------------------
+// =============================================================
+// Convert an Atto public key to an Atto address.
+//
+// Atto V1 address:
+//   1 byte algorithm = 0
+//   32 byte public key
+//   5 byte BLAKE2b-40 checksum
+//   Base32 without padding
+//   "atto://" prefix
+//
+// This is the exact format documented by Atto.
+// =============================================================
+
+function publicKeyToAttoAddress(
+  publicKeyHex: string,
+): string {
+  const publicKey = hexToBytes(
+    publicKeyHex,
+  );
+
+  if (publicKey.length !== 32) {
+    throw new Error(
+      "ATTO public key must be exactly 32 bytes.",
+    );
+  }
+
+  // V1 = algorithm byte 0.
+  const algorithm = new Uint8Array([0]);
+
+  // Checksum input = algorithm + public key.
+  const checksumInput = new Uint8Array(33);
+
+  checksumInput.set(algorithm, 0);
+  checksumInput.set(publicKey, 1);
+
+  // Atto uses BLAKE2b-40 = 5 bytes.
+  const checksum = blake2b(
+    checksumInput,
+    { dkLen: 5 },
+  );
+
+  // 1 + 32 + 5 = 38 bytes.
+  const addressBytes = new Uint8Array(38);
+
+  addressBytes.set(
+    algorithm,
+    0,
+  );
+
+  addressBytes.set(
+    publicKey,
+    1,
+  );
+
+  addressBytes.set(
+    checksum,
+    33,
+  );
+
+  // Standard Base32 encoder produces uppercase and padding.
+  // Atto uses lowercase with no padding.
+  const encoded =
+    encodeBase32(addressBytes)
+      .replace(/=+$/, "")
+      .toLowerCase();
+
+  return `atto://${encoded}`;
+}
+
+// =============================================================
+// Convert hexadecimal string to bytes.
+// =============================================================
+
+function hexToBytes(
+  hex: string,
+): Uint8Array {
+  if (
+    hex.length % 2 !== 0 ||
+    !/^[0-9A-Fa-f]+$/.test(hex)
+  ) {
+    throw new Error(
+      "Invalid hexadecimal public key.",
+    );
+  }
+
+  const bytes =
+    new Uint8Array(hex.length / 2);
+
+  for (
+    let i = 0;
+    i < hex.length;
+    i += 2
+  ) {
+    bytes[i / 2] =
+      parseInt(
+        hex.slice(i, i + 2),
+        16,
+      );
+  }
+
+  return bytes;
+}
+
+// =============================================================
+// Read first JSON object from NDJSON stream.
+// =============================================================
 
 async function readFirstJson(
   response: Response,
@@ -372,30 +534,44 @@ async function readFirstJson(
     return null;
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+  const reader =
+    response.body.getReader();
+
+  const decoder =
+    new TextDecoder();
 
   let buffer = "";
 
   try {
     while (true) {
-      const { value, done } =
-        await reader.read();
+      const {
+        value,
+        done,
+      } = await reader.read();
 
-      if (done) break;
+      if (done) {
+        break;
+      }
 
-      buffer += decoder.decode(value, {
-        stream: true,
-      });
+      buffer +=
+        decoder.decode(
+          value,
+          { stream: true },
+        );
 
-      const lines = buffer.split("\n");
+      const lines =
+        buffer.split("\n");
 
-      buffer = lines.pop() ?? "";
+      buffer =
+        lines.pop() ?? "";
 
       for (const line of lines) {
-        const trimmed = line.trim();
+        const trimmed =
+          line.trim();
 
-        if (!trimmed) continue;
+        if (!trimmed) {
+          continue;
+        }
 
         try {
           JSON.parse(trimmed);
@@ -409,7 +585,8 @@ async function readFirstJson(
       }
     }
 
-    const finalLine = buffer.trim();
+    const finalLine =
+      buffer.trim();
 
     if (finalLine) {
       try {
@@ -430,74 +607,35 @@ async function readFirstJson(
   }
 }
 
-// -------------------------------------------------------------
-// Get an account from its public key.
-// -------------------------------------------------------------
+// =============================================================
+// Format raw ATTO amount for error messages.
+// =============================================================
 
-async function getAccount(
-  publicKey: string,
-): Promise<any> {
-  const url =
-    `${ATTO_GATEKEEPER}/accounts/${publicKey}/stream`;
+function formatAtto(
+  raw: bigint,
+): string {
+  const whole =
+    raw / RAW_PER_ATTO;
 
-  let response: Response;
-
-  try {
-    response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/x-ndjson, application/json",
-      },
-    });
-  } catch (err) {
-    console.error(
-      "Account lookup failed:",
-      err,
-    );
-
-    throw new Error(
-      "Could not reach the ATTO network while resolving an account.",
-    );
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `Could not resolve ATTO account (${response.status}).`,
-    );
-  }
-
-  const text = await readFirstJson(response);
-
-  if (!text) {
-    throw new Error(
-      "The ATTO account response was empty.",
-    );
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(
-      "The ATTO account response could not be parsed.",
-    );
-  }
-}
-
-function formatAtto(raw: bigint): string {
-  const whole = raw / RAW_PER_ATTO;
-  const fraction = raw % RAW_PER_ATTO;
+  const fraction =
+    raw % RAW_PER_ATTO;
 
   if (fraction === 0n) {
     return whole.toString();
   }
 
-  const fractionText = fraction
-    .toString()
-    .padStart(18, "0")
-    .replace(/0+$/, "");
+  const fractionText =
+    fraction
+      .toString()
+      .padStart(18, "0")
+      .replace(/0+$/, "");
 
   return `${whole}.${fractionText}`;
 }
+
+// =============================================================
+// JSON response helper.
+// =============================================================
 
 function json(
   body: unknown,
@@ -509,7 +647,8 @@ function json(
       status,
       headers: {
         ...corsHeaders,
-        "Content-Type": "application/json",
+        "Content-Type":
+          "application/json",
       },
     },
   );
