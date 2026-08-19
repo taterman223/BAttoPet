@@ -10,9 +10,7 @@ export function TierBadge({
 }) {
   const c = TIER_COLORS[tier];
   const pad =
-    size === "sm"
-      ? "px-2 py-0.5 text-[10px]"
-      : "px-2.5 py-1 text-xs";
+    size === "sm" ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs";
 
   return (
     <span
@@ -56,17 +54,10 @@ export function StatBar({
   );
 }
 
-/*
- * Each tier has a different base palette.
- *
- * Palette indexes:
- * 0 = transparent/background
- * 1 = highlight
- * 2 = light
- * 3 = main body
- * 4 = dark
- * 5 = eyes / darkest
- */
+/* =========================================================
+   PET PALETTES
+   ========================================================= */
+
 const PIXEL_PALETTES: Record<string, string[]> = {
   Worthless: [
     "#fff7ed",
@@ -125,7 +116,10 @@ const PIXEL_PALETTES: Record<string, string[]> = {
 
 const GRID = 16;
 
-// Seeded PRNG
+/* =========================================================
+   SEEDED RANDOM
+   ========================================================= */
+
 function makeRng(seed: number) {
   let s = seed >>> 0;
 
@@ -140,76 +134,104 @@ function makeRng(seed: number) {
   };
 }
 
-type BodyType =
-  | "quadruped"
-  | "biped"
-  | "serpent"
-  | "blob"
-  | "avian"
-  | "insect";
+/* =========================================================
+   SPECIES TYPES
+   ========================================================= */
 
-const SPECIES_BODY: Record<string, BodyType> = {
-  "Flame Drake": "biped",
-  "Crystal Fox": "quadruped",
-  "Shadow Lynx": "quadruped",
-  "Storm Serpent": "serpent",
-  "Moss Golem": "biped",
-  "Aether Moth": "insect",
-  "Frost Hound": "quadruped",
-  "Ember Sprite": "blob",
-  "Tide Kraken": "blob",
-  "Dune Beetle": "insect",
-  "Void Owl": "avian",
-  "Glimmer Slime": "blob",
-  "Thorn Boar": "quadruped",
-  "Static Eel": "serpent",
-  "Cloud Ram": "quadruped",
-  "Cinder Bat": "avian",
-  "Coral Newt": "quadruped",
-  "Bramble Stag": "quadruped",
-  "Ash Raven": "avian",
-  "Lumen Jelly": "blob",
-  "Frost Wisp": "blob",
-  "Magma Toad": "quadruped",
-  "Hex Scorpion": "insect",
-  "Vine Python": "serpent",
-  "Dusk Falcon": "avian",
-  "Glass Mantis": "insect",
-  "Rust Hound": "quadruped",
-  "Plume Heron": "avian",
-  "Shard Crab": "insect",
-  "Wraith Koi": "serpent",
-  "Bolt Weasel": "quadruped",
-  "Gale Sparrow": "avian",
-  "Marsh Imp": "biped",
-  "Ember Lynx": "quadruped",
-  "Frost Stag": "quadruped",
-  "Quartz Badger": "quadruped",
-  "Smog Rat": "quadruped",
-  "Tide Urchin": "blob",
-  "Gloom Fern": "blob",
-  "Spark Finch": "avian",
+type AnimalType =
+  | "dragon"
+  | "fox"
+  | "lynx"
+  | "snake"
+  | "golem"
+  | "moth"
+  | "hound"
+  | "sprite"
+  | "kraken"
+  | "beetle"
+  | "owl"
+  | "slime"
+  | "boar"
+  | "eel"
+  | "ram"
+  | "bat"
+  | "newt"
+  | "stag"
+  | "raven"
+  | "jelly"
+  | "wisp"
+  | "toad"
+  | "scorpion"
+  | "python"
+  | "falcon"
+  | "mantis"
+  | "rat"
+  | "heron"
+  | "crab"
+  | "koi"
+  | "weasel"
+  | "sparrow"
+  | "imp";
+
+const SPECIES_TYPE: Record<string, AnimalType> = {
+  "Flame Drake": "dragon",
+  "Crystal Fox": "fox",
+  "Shadow Lynx": "lynx",
+  "Storm Serpent": "snake",
+  "Moss Golem": "golem",
+  "Aether Moth": "moth",
+  "Frost Hound": "hound",
+  "Ember Sprite": "sprite",
+  "Tide Kraken": "kraken",
+  "Dune Beetle": "beetle",
+  "Void Owl": "owl",
+  "Glimmer Slime": "slime",
+  "Thorn Boar": "boar",
+  "Static Eel": "eel",
+  "Cloud Ram": "ram",
+  "Cinder Bat": "bat",
+  "Coral Newt": "newt",
+  "Bramble Stag": "stag",
+  "Ash Raven": "raven",
+  "Lumen Jelly": "jelly",
+  "Frost Wisp": "wisp",
+  "Magma Toad": "toad",
+  "Hex Scorpion": "scorpion",
+  "Vine Python": "python",
+  "Dusk Falcon": "falcon",
+  "Glass Mantis": "mantis",
+  "Rust Hound": "hound",
+  "Plume Heron": "heron",
+  "Shard Crab": "crab",
+  "Wraith Koi": "koi",
+  "Bolt Weasel": "weasel",
+  "Gale Sparrow": "sparrow",
+  "Marsh Imp": "imp",
 };
 
-function getBodyType(
+function getAnimalType(
   species: string,
   rng: () => number
-): BodyType {
-  if (SPECIES_BODY[species]) {
-    return SPECIES_BODY[species];
+): AnimalType {
+  if (SPECIES_TYPE[species]) {
+    return SPECIES_TYPE[species];
   }
 
-  const types: BodyType[] = [
-    "quadruped",
-    "biped",
-    "serpent",
-    "blob",
-    "avian",
-    "insect",
-  ];
+  const types: AnimalType[] = [
+    "fox",
+    "dragon",
+    "snake",
+    "bird",
+    "beetle",
+    "slime",
+  ] as AnimalType[];
 
   return types[Math.floor(rng() * types.length)];
 }
+
+/* =========================================================
+   PIXEL RENDERING
+   ========================================================= */
 
 function pixelGrid(
   pattern: number[],
@@ -219,24 +241,23 @@ function pixelGrid(
   const cells: React.ReactNode[] = [];
 
   for (let i = 0; i < pattern.length; i++) {
-    const val = pattern[i];
+    const value = pattern[i];
 
-    if (val === 0) continue;
+    if (value === 0) continue;
 
-    const col = i % GRID;
-    const row = Math.floor(i / GRID);
-    const color = palette[val] ?? palette[1];
+    const x = i % GRID;
+    const y = Math.floor(i / GRID);
 
     cells.push(
       <div
         key={i}
         style={{
           position: "absolute",
-          left: col * px,
-          top: row * px,
+          left: x * px,
+          top: y * px,
           width: px,
           height: px,
-          background: color,
+          background: palette[value] ?? palette[1],
         }}
       />
     );
@@ -245,472 +266,383 @@ function pixelGrid(
   return cells;
 }
 
-// ---------------- CREATURE GENERATION ----------------
+/* =========================================================
+   CREATURE GENERATOR
+   ========================================================= */
 
 function generateCreature(
   seed: number,
   species: string
 ): number[] {
   const rng = makeRng(seed);
-  const body = getBodyType(species, rng);
+
+  const type = getAnimalType(species, rng);
 
   const grid = new Array(GRID * GRID).fill(0);
 
-  const set = (x: number, y: number, v: number) => {
+  const set = (x: number, y: number, value: number) => {
     if (
       x >= 0 &&
       x < GRID &&
       y >= 0 &&
       y < GRID
     ) {
-      grid[y * GRID + x] = v;
+      grid[y * GRID + x] = value;
     }
   };
 
   const fill = (
-    x0: number,
-    y0: number,
     x1: number,
     y1: number,
-    v: number
+    x2: number,
+    y2: number,
+    value: number
   ) => {
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        set(x, y, v);
+    for (let y = y1; y <= y2; y++) {
+      for (let x = x1; x <= x2; x++) {
+        set(x, y, value);
       }
     }
   };
 
-  const hasHorns = rng() > 0.4;
-  const hasWings = rng() > 0.5;
-  const hasTail = rng() > 0.2;
-  const earStyle = Math.floor(rng() * 3);
   const eyeStyle = Math.floor(rng() * 3);
-  const bodyPattern = Math.floor(rng() * 4);
-  const hasArms = body === "biped";
+  const pattern = Math.floor(rng() * 5);
+  const variation = Math.floor(rng() * 4);
 
-  // ---------------- QUADRUPED ----------------
+  const eyes = (
+    x1: number,
+    x2: number,
+    y: number
+  ) => {
+    if (eyeStyle === 0) {
+      set(x1, y, 5);
+      set(x2, y, 5);
+    } else if (eyeStyle === 1) {
+      set(x1, y, 5);
+      set(x1, y + 1, 5);
+      set(x2, y, 5);
+      set(x2, y + 1, 5);
+    } else {
+      set(x1, y, 5);
+      set(x2, y, 5);
+      set(x1 - 1, y - 1, 4);
+      set(x2 + 1, y - 1, 4);
+    }
+  };
 
-  if (body === "quadruped") {
-    const bodyTop = 6;
-    const bodyBot = 11;
-    const bodyL = 3;
-    const bodyR = 12;
+  /* =======================================================
+     DRAGON
+     ======================================================= */
 
-    fill(bodyL, bodyTop, bodyR, bodyBot, 3);
-
-    set(bodyL, bodyTop, 0);
-    set(bodyR, bodyTop, 0);
-    set(bodyL, bodyTop + 1, 3);
-    set(bodyR, bodyTop + 1, 3);
-    set(bodyL, bodyBot, 0);
-    set(bodyR, bodyBot, 0);
+  if (type === "dragon") {
+    fill(4, 7, 11, 12, 3);
 
     // Head
-    fill(9, 4, 13, 7, 3);
+    fill(8, 3, 13, 7, 3);
 
-    set(9, 4, 0);
-    set(13, 4, 0);
-
-    // Ears
-    if (earStyle === 0) {
-      fill(9, 2, 10, 4, 4);
-      fill(12, 2, 13, 4, 4);
-    } else if (earStyle === 1) {
-      set(10, 3, 4);
-      set(10, 4, 4);
-      set(12, 3, 4);
-      set(12, 4, 4);
-    }
+    // Snout
+    fill(12, 5, 14, 7, 4);
 
     // Horns
-    if (hasHorns) {
-      set(9, 2, 4);
-      set(9, 1, 4);
-      set(13, 2, 4);
-      set(13, 1, 4);
-    }
+    set(9, 2, 4);
+    set(9, 1, 4);
+    set(12, 2, 4);
+    set(13, 1, 4);
 
-    // Eyes
-    if (eyeStyle === 0) {
-      set(11, 5, 5);
-      set(12, 5, 5);
-    } else if (eyeStyle === 1) {
-      set(11, 5, 5);
-      set(11, 6, 5);
-      set(12, 5, 5);
-      set(12, 6, 5);
-    } else {
-      set(11, 5, 5);
-      set(12, 5, 5);
-      set(10, 4, 4);
-      set(13, 4, 4);
-    }
+    eyes(10, 12, 4);
 
-    set(10, 4, 1);
+    // Wings
+    fill(2, 4, 4, 9, 2);
+    set(1, 5, 4);
+    set(1, 6, 4);
+    set(1, 7, 4);
 
-    // Legs
-    fill(3, 12, 4, 14, 4);
-    fill(5, 12, 6, 14, 4);
-    fill(10, 12, 11, 14, 4);
-    fill(12, 12, 13, 14, 4);
-
-    // Tail
-    if (hasTail) {
-      const tailLen = 2 + Math.floor(rng() * 3);
-
-      for (let i = 0; i < tailLen; i++) {
-        set(2 - i, bodyTop + i, 3);
-      }
-
-      if (rng() > 0.5) {
-        set(1, 5, 3);
-      }
-    }
-
-    // Belly
-    if (bodyPattern === 3) {
-      fill(5, 9, 10, 10, 2);
-    }
-
-    // Stripes
-    if (bodyPattern === 1) {
-      set(5, 7, 4);
-      set(8, 7, 4);
-      set(11, 7, 4);
-      set(5, 10, 4);
-      set(8, 10, 4);
-    }
-
-    // Spots
-    if (bodyPattern === 2) {
-      set(5, 8, 2);
-      set(9, 9, 2);
-      set(7, 7, 2);
-    }
-
-  // ---------------- BIPED ----------------
-
-  } else if (body === "biped") {
-    const bodyTop = 7;
-    const bodyBot = 12;
-    const bodyL = 4;
-    const bodyR = 11;
-
-    fill(bodyL, bodyTop, bodyR, bodyBot, 3);
-
-    set(bodyL, bodyTop, 0);
-    set(bodyR, bodyTop, 0);
-
-    // Head
-    fill(5, 2, 10, 6, 3);
-
-    set(5, 2, 0);
-    set(10, 2, 0);
-    set(5, 6, 0);
-    set(10, 6, 0);
-
-    // Eyes
-    if (eyeStyle === 0) {
-      set(6, 4, 5);
-      set(9, 4, 5);
-    } else if (eyeStyle === 1) {
-      set(6, 3, 5);
-      set(6, 4, 5);
-      set(9, 3, 5);
-      set(9, 4, 5);
-    } else {
-      set(6, 4, 5);
-      set(9, 4, 5);
-      set(5, 3, 4);
-      set(10, 3, 4);
-    }
-
-    // Horns
-    if (hasHorns) {
-      fill(5, 0, 6, 2, 4);
-      fill(9, 0, 10, 2, 4);
-    }
-
-    // Arms
-    if (hasArms) {
-      fill(2, 7, 4, 10, 3);
-      fill(11, 7, 13, 10, 3);
-
-      set(2, 10, 4);
-      set(13, 10, 4);
-    }
+    // Wing spikes
+    set(2, 3, 4);
+    set(1, 4, 4);
 
     // Legs
     fill(5, 12, 6, 15, 4);
     fill(9, 12, 10, 15, 4);
 
-    // Wings
-    if (hasWings) {
-      fill(0, 5, 3, 10, 2);
-      set(0, 5, 0);
-      set(0, 10, 0);
+    // Tail
+    set(3, 10, 3);
+    set(2, 11, 3);
+    set(1, 12, 3);
+    set(0, 13, 4);
 
-      fill(12, 5, 15, 10, 2);
-      set(15, 5, 0);
-      set(15, 10, 0);
+    // Fire
+    if (variation === 0) {
+      set(14, 6, 1);
+      set(15, 6, 4);
+      set(15, 5, 2);
+      set(15, 7, 2);
     }
 
-    set(5, 7, 1);
-    set(6, 7, 1);
-
-    if (bodyPattern === 3) {
-      fill(5, 10, 10, 11, 2);
+    if (pattern === 1) {
+      set(5, 9, 4);
+      set(7, 10, 4);
+      set(9, 9, 4);
     }
 
-  // ---------------- SERPENT ----------------
+    return grid;
+  }
 
-  } else if (body === "serpent") {
-    const points = [
-      [12, 3],
-      [12, 4],
-      [11, 5],
-      [10, 6],
-      [9, 7],
-      [8, 8],
-      [7, 9],
-      [6, 10],
-      [5, 11],
-      [4, 12],
-      [3, 13],
+  /* =======================================================
+     FOX / LYNX / HOUND / BOAR / WEASEL / RAT
+     ======================================================= */
+
+  if (
+    type === "fox" ||
+    type === "lynx" ||
+    type === "hound" ||
+    type === "boar" ||
+    type === "weasel" ||
+    type === "rat"
+  ) {
+    const narrow = type === "weasel" || type === "rat";
+
+    // Body
+    fill(
+      narrow ? 4 : 3,
+      7,
+      narrow ? 11 : 12,
+      12,
+      3
+    );
+
+    // Head
+    fill(8, 4, 13, 8, 3);
+
+    // Ears
+    if (type === "fox" || type === "lynx") {
+      set(8, 3, 4);
+      set(8, 2, 4);
+      set(13, 3, 4);
+      set(13, 2, 4);
+
+      if (type === "lynx") {
+        set(8, 1, 4);
+        set(13, 1, 4);
+      }
+    } else {
+      fill(9, 3, 10, 4, 4);
+      fill(12, 3, 13, 4, 4);
+    }
+
+    // Snout
+    fill(12, 6, 14, 8, 4);
+
+    eyes(10, 12, 5);
+
+    // Nose
+    set(14, 7, 5);
+
+    // Legs
+    fill(4, 12, 5, 15, 4);
+    fill(7, 12, 8, 15, 4);
+    fill(10, 12, 11, 15, 4);
+
+    // Tail
+    if (type === "fox" || type === "lynx") {
+      set(2, 8, 3);
+      set(1, 7, 3);
+      set(1, 6, 4);
+      set(0, 6, 3);
+    } else if (type === "rat") {
+      set(3, 10, 4);
+      set(2, 11, 4);
+      set(1, 12, 4);
+      set(0, 13, 4);
+    } else {
+      set(2, 10, 3);
+      set(1, 9, 3);
+      set(0, 8, 4);
+    }
+
+    // Spots
+    if (pattern === 1) {
+      set(5, 8, 2);
+      set(7, 10, 2);
+      set(10, 9, 2);
+    }
+
+    if (pattern === 2) {
+      set(5, 8, 4);
+      set(9, 10, 4);
+    }
+
+    // Chest
+    if (pattern === 3) {
+      fill(9, 9, 11, 11, 2);
+    }
+
+    return grid;
+  }
+
+  /* =======================================================
+     SNAKE / PYTHON / EEL / KOI
+     ======================================================= */
+
+  if (
+    type === "snake" ||
+    type === "python" ||
+    type === "eel" ||
+    type === "koi"
+  ) {
+    // Head
+    fill(9, 3, 13, 6, 3);
+
+    set(9, 3, 0);
+    set(13, 3, 0);
+
+    eyes(10, 12, 4);
+
+    // Long winding body
+    const path = [
+      [11, 6],
+      [10, 7],
+      [9, 8],
+      [8, 9],
+      [7, 10],
+      [6, 11],
+      [5, 12],
+      [4, 13],
       [3, 14],
     ];
 
-    for (const [x, y] of points) {
+    for (const [x, y] of path) {
       set(x, y, 3);
       set(x + 1, y, 3);
+      set(x, y + 1, 4);
     }
 
-    for (let i = 0; i < points.length - 1; i++) {
-      const [x, y] = points[i];
-
-      set(x, y - 1, 2);
-      set(x + 1, y - 1, 2);
+    // Tongue
+    if (type === "snake" || type === "python") {
+      set(14, 5, 4);
+      set(15, 4, 4);
+      set(15, 6, 4);
     }
 
-    // Head
-    fill(11, 2, 14, 5, 3);
-
-    set(11, 2, 0);
-    set(14, 2, 0);
-    set(11, 5, 0);
-    set(14, 5, 0);
-
-    // Eyes
-    if (eyeStyle === 0) {
-      set(12, 3, 5);
-      set(13, 3, 5);
-    } else if (eyeStyle === 1) {
-      set(12, 3, 5);
-      set(12, 4, 5);
-      set(13, 3, 5);
-      set(13, 4, 5);
-    } else {
-      set(12, 3, 5);
-      set(13, 3, 5);
-      set(11, 2, 4);
+    // Eel fin
+    if (type === "eel") {
+      fill(6, 9, 7, 11, 2);
+      set(5, 8, 2);
     }
 
-    set(12, 2, 1);
-
-    // Tail
-    set(2, 14, 4);
-    set(1, 14, 4);
+    // Koi fins
+    if (type === "koi") {
+      fill(8, 7, 9, 9, 2);
+      fill(5, 11, 6, 13, 2);
+    }
 
     // Pattern
-    if (bodyPattern === 1) {
+    if (pattern === 1) {
+      set(9, 8, 4);
+      set(7, 10, 4);
+      set(5, 12, 4);
+    }
+
+    if (pattern === 2) {
+      set(10, 7, 2);
+      set(8, 9, 2);
+      set(6, 11, 2);
+    }
+
+    return grid;
+  }
+
+  /* =======================================================
+     BIRD TYPES
+     ======================================================= */
+
+  if (
+    type === "owl" ||
+    type === "raven" ||
+    type === "falcon" ||
+    type === "heron" ||
+    type === "sparrow" ||
+    type === "bat"
+  ) {
+    const birdY = type === "heron" ? 4 : 5;
+
+    // Body
+    fill(5, birdY + 2, 10, 11, 3);
+
+    // Head
+    fill(6, 2, 10, 6, 3);
+
+    // Beak
+    if (type === "owl") {
+      set(8, 6, 4);
       set(9, 6, 4);
-      set(6, 9, 4);
-      set(4, 12, 4);
-    }
-
-    if (bodyPattern === 2) {
-      set(10, 5, 2);
-      set(7, 8, 2);
-      set(5, 11, 2);
-    }
-
-  // ---------------- BLOB ----------------
-
-  } else if (body === "blob") {
-    const cx = 8;
-    const cy = 8;
-    const r = 5;
-
-    for (let y = 0; y < GRID; y++) {
-      for (let x = 0; x < GRID; x++) {
-        const dx = x - cx;
-        const dy = (y - cy) * 1.1;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < r) {
-          set(x, y, 3);
-
-          if (dist < r - 2) {
-            set(x, y, 2);
-          }
-
-          if (dist < 1) {
-            set(x, y, 1);
-          }
-        }
-      }
-    }
-
-    // Drippy bottom
-    if (rng() > 0.5) {
-      set(5, 14, 3);
-      set(8, 14, 3);
-      set(11, 14, 3);
-
-      set(5, 15, 4);
-      set(11, 15, 4);
-    }
-
-    // Eyes
-    if (eyeStyle === 0) {
-      set(6, 7, 5);
-      set(10, 7, 5);
-    } else if (eyeStyle === 1) {
-      set(6, 6, 5);
-      set(6, 7, 5);
-      set(10, 6, 5);
-      set(10, 7, 5);
     } else {
-      set(6, 7, 5);
-      set(10, 7, 5);
-      set(5, 6, 4);
+      set(10, 5, 4);
+      set(11, 5, 4);
       set(11, 6, 4);
     }
 
-    // Highlights
-    set(6, 5, 1);
-    set(7, 4, 1);
-
-    // Horns
-    if (hasHorns) {
-      set(5, 2, 4);
-      set(11, 2, 4);
-    }
-
-  // ---------------- AVIAN ----------------
-
-  } else if (body === "avian") {
-    // Body
-    fill(5, 5, 10, 11, 3);
-
-    set(5, 5, 0);
-    set(10, 5, 0);
-    set(5, 11, 0);
-    set(10, 11, 0);
-
-    // Head
-    fill(6, 3, 9, 6, 3);
-
-    set(6, 3, 0);
-    set(9, 3, 0);
-
-    // Beak
-    set(10, 5, 4);
-    set(11, 5, 4);
-    set(11, 6, 4);
-
-    // Eyes
-    if (eyeStyle === 0) {
-      set(7, 4, 5);
-      set(8, 4, 5);
-    } else if (eyeStyle === 1) {
-      set(7, 4, 5);
-      set(7, 5, 5);
-      set(8, 4, 5);
-    } else {
-      set(7, 4, 5);
-      set(8, 4, 5);
-      set(6, 3, 4);
-      set(9, 3, 4);
-    }
+    eyes(7, 9, 4);
 
     // Wings
-    fill(0, 5, 4, 9, 2);
-    set(0, 5, 0);
-    set(0, 9, 0);
+    if (type === "bat") {
+      fill(1, 5, 4, 9, 2);
+      fill(11, 5, 14, 9, 2);
 
-    fill(11, 5, 15, 9, 2);
-    set(15, 5, 0);
-    set(15, 9, 0);
+      set(0, 6, 4);
+      set(0, 8, 4);
+      set(15, 6, 4);
+      set(15, 8, 4);
+    } else {
+      fill(1, 6, 4, 10, 2);
+      fill(11, 6, 14, 10, 2);
 
-    // Wing detail
-    set(1, 6, 4);
-    set(1, 8, 4);
-    set(14, 6, 4);
-    set(14, 8, 4);
+      set(1, 5, 4);
+      set(14, 5, 4);
+    }
 
     // Legs
     fill(6, 12, 6, 14, 4);
     fill(9, 12, 9, 14, 4);
 
-    set(5, 14, 4);
-    set(7, 14, 4);
-    set(8, 14, 4);
-    set(10, 14, 4);
-
     // Tail
-    if (hasTail) {
-      set(4, 10, 3);
-      set(3, 11, 3);
-      set(2, 12, 3);
+    set(6, 11, 3);
+    set(7, 12, 3);
+    set(8, 13, 3);
+
+    // Owl face
+    if (type === "owl") {
+      set(6, 3, 2);
+      set(7, 3, 2);
+      set(9, 3, 2);
+      set(10, 3, 2);
     }
 
-    // Ear tufts
-    if (earStyle === 0) {
-      set(6, 2, 4);
-      set(9, 2, 4);
+    // Bird markings
+    if (pattern === 1) {
+      fill(6, 8, 9, 10, 2);
     }
 
-    set(6, 6, 1);
+    return grid;
+  }
 
-    if (bodyPattern === 3) {
-      fill(6, 9, 9, 10, 2);
-    }
+  /* =======================================================
+     INSECTS
+     ======================================================= */
 
-  // ---------------- INSECT ----------------
-
-  } else if (body === "insect") {
-    // Thorax
-    fill(6, 6, 9, 9, 3);
-
+  if (
+    type === "moth" ||
+    type === "beetle" ||
+    type === "mantis" ||
+    type === "scorpion"
+  ) {
     // Head
-    fill(6, 3, 9, 6, 3);
+    fill(7, 3, 9, 6, 3);
 
-    set(6, 3, 0);
-    set(9, 3, 0);
+    // Body
+    fill(6, 6, 10, 12, 3);
 
-    // Abdomen
-    fill(5, 9, 10, 13, 4);
-
-    set(5, 9, 0);
-    set(10, 9, 0);
-    set(5, 13, 0);
-    set(10, 13, 0);
-
-    // Eyes
-    if (eyeStyle === 0) {
-      set(7, 4, 5);
-      set(8, 4, 5);
-    } else if (eyeStyle === 1) {
-      set(7, 4, 5);
-      set(7, 5, 5);
-      set(8, 4, 5);
-      set(8, 5, 5);
-    } else {
-      set(7, 4, 5);
-      set(8, 4, 5);
-    }
+    eyes(7, 9, 4);
 
     // Antennae
     set(6, 2, 4);
@@ -718,47 +650,309 @@ function generateCreature(
     set(9, 2, 4);
     set(9, 1, 4);
 
-    // Legs
-    set(4, 6, 4);
-    set(3, 6, 4);
-    set(4, 7, 4);
-    set(3, 7, 4);
-    set(4, 8, 4);
-    set(3, 8, 4);
-
-    set(11, 6, 4);
-    set(12, 6, 4);
-    set(11, 7, 4);
-    set(12, 7, 4);
-    set(11, 8, 4);
-    set(12, 8, 4);
-
     // Wings
-    if (hasWings) {
-      fill(2, 4, 5, 8, 2);
-      set(2, 4, 0);
-      set(2, 8, 0);
+    if (type === "moth") {
+      fill(2, 4, 5, 9, 2);
+      fill(10, 4, 13, 9, 2);
 
-      fill(10, 4, 13, 8, 2);
-      set(13, 4, 0);
-      set(13, 8, 0);
+      set(1, 5, 4);
+      set(14, 5, 4);
     }
 
-    // Segment lines
-    set(6, 10, 5);
-    set(9, 10, 5);
-    set(6, 12, 5);
-    set(9, 12, 5);
+    if (type === "beetle") {
+      fill(5, 8, 11, 13, 4);
+      set(8, 8, 2);
+    }
 
-    // Highlight
+    if (type === "mantis") {
+      // long arms
+      set(5, 6, 4);
+      set(4, 7, 4);
+      set(3, 8, 4);
+      set(10, 6, 4);
+      set(11, 7, 4);
+      set(12, 8, 4);
+    }
+
+    if (type === "scorpion") {
+      // pincers
+      set(4, 7, 4);
+      set(3, 6, 4);
+      set(11, 7, 4);
+      set(12, 6, 4);
+
+      // curved tail
+      set(11, 10, 4);
+      set(12, 9, 4);
+      set(13, 8, 4);
+      set(14, 7, 4);
+      set(14, 6, 4);
+    }
+
+    // Legs
+    for (let y = 7; y <= 10; y++) {
+      set(4, y, 4);
+      set(3, y, 4);
+      set(11, y, 4);
+      set(12, y, 4);
+    }
+
+    // Patterns
+    if (pattern === 1) {
+      set(7, 8, 2);
+      set(9, 8, 2);
+      set(7, 10, 2);
+      set(9, 10, 2);
+    }
+
+    return grid;
+  }
+
+  /* =======================================================
+     SLIME / JELLY / SPRITE / WISP
+     ======================================================= */
+
+  if (
+    type === "slime" ||
+    type === "jelly" ||
+    type === "sprite" ||
+    type === "wisp"
+  ) {
+    const top = type === "wisp" ? 5 : 6;
+    const bottom = type === "jelly" ? 13 : 12;
+
+    for (let y = top; y <= bottom; y++) {
+      const width =
+        y === top
+          ? 3
+          : y === top + 1
+            ? 5
+            : 6;
+
+      for (let x = 8 - width / 2; x <= 8 + width / 2; x++) {
+        set(Math.floor(x), y, 3);
+      }
+    }
+
+    // Face
+    eyes(6, 10, 8);
+
+    // Highlights
+    set(6, 7, 1);
     set(7, 6, 1);
-    set(8, 6, 1);
+
+    // Wisp tail
+    if (type === "wisp") {
+      set(6, 11, 2);
+      set(7, 12, 2);
+      set(8, 13, 2);
+      set(9, 12, 2);
+      set(10, 13, 2);
+    }
+
+    // Sprite wings
+    if (type === "sprite") {
+      fill(2, 7, 4, 10, 2);
+      fill(12, 7, 14, 10, 2);
+    }
+
+    // Jelly tentacles
+    if (type === "jelly") {
+      set(4, 12, 4);
+      set(5, 13, 4);
+      set(7, 13, 4);
+      set(9, 13, 4);
+      set(11, 13, 4);
+    }
+
+    return grid;
+  }
+
+  /* =======================================================
+     RAM / STAG / GOLEM
+     ======================================================= */
+
+  if (
+    type === "ram" ||
+    type === "stag" ||
+    type === "golem"
+  ) {
+    // Body
+    fill(4, 7, 11, 12, 3);
+
+    // Head
+    fill(8, 3, 13, 8, 3);
+
+    eyes(10, 12, 5);
+
+    // Ears
+    set(9, 3, 4);
+    set(13, 3, 4);
+
+    // Horns
+    if (type === "ram") {
+      set(8, 4, 4);
+      set(7, 4, 4);
+      set(7, 3, 4);
+
+      set(13, 4, 4);
+      set(14, 4, 4);
+      set(14, 3, 4);
+    }
+
+    // Stag antlers
+    if (type === "stag") {
+      set(9, 2, 4);
+      set(8, 1, 4);
+      set(7, 1, 4);
+      set(10, 2, 4);
+
+      set(12, 2, 4);
+      set(13, 1, 4);
+      set(14, 1, 4);
+    }
+
+    // Golem arms
+    if (type === "golem") {
+      fill(1, 8, 3, 11, 4);
+      fill(12, 8, 14, 11, 4);
+
+      set(2, 7, 2);
+      set(13, 7, 2);
+    }
+
+    // Legs
+    fill(5, 12, 6, 15, 4);
+    fill(9, 12, 10, 15, 4);
+
+    // Tail
+    if (type === "ram" || type === "stag") {
+      set(3, 9, 3);
+      set(2, 8, 3);
+      set(1, 9, 4);
+    }
+
+    // Stone cracks
+    if (type === "golem") {
+      set(5, 8, 4);
+      set(8, 9, 4);
+      set(10, 7, 4);
+      set(7, 11, 2);
+    }
+
+    return grid;
+  }
+
+  /* =======================================================
+     CRAB / KRAKEN / NEWT / TOAD
+     ======================================================= */
+
+  if (
+    type === "crab" ||
+    type === "kraken" ||
+    type === "newt" ||
+    type === "toad"
+  ) {
+    // Main body
+    fill(4, 7, 11, 11, 3);
+
+    // Head
+    fill(6, 4, 10, 8, 3);
+
+    eyes(6, 9, 5);
+
+    if (type === "crab") {
+      // claws
+      fill(1, 7, 3, 9, 4);
+      fill(12, 7, 14, 9, 4);
+
+      // legs
+      set(3, 10, 4);
+      set(2, 11, 4);
+      set(3, 12, 4);
+
+      set(12, 10, 4);
+      set(13, 11, 4);
+      set(12, 12, 4);
+    }
+
+    if (type === "kraken") {
+      // tentacles
+      set(4, 11, 4);
+      set(3, 12, 4);
+      set(2, 13, 4);
+      set(1, 14, 4);
+
+      set(6, 11, 4);
+      set(6, 12, 4);
+      set(5, 13, 4);
+
+      set(9, 11, 4);
+      set(9, 12, 4);
+      set(10, 13, 4);
+
+      set(11, 11, 4);
+      set(12, 12, 4);
+      set(13, 13, 4);
+    }
+
+    if (type === "newt" || type === "toad") {
+      // legs
+      fill(3, 10, 5, 12, 4);
+      fill(10, 10, 12, 12, 4);
+
+      // tail
+      set(2, 9, 3);
+      set(1, 10, 3);
+    }
+
+    return grid;
+  }
+
+  /* =======================================================
+     IMP
+     ======================================================= */
+
+  if (type === "imp") {
+    // body
+    fill(5, 7, 10, 12, 3);
+
+    // head
+    fill(5, 3, 10, 7, 3);
+
+    // horns
+    set(5, 2, 4);
+    set(5, 1, 4);
+    set(10, 2, 4);
+    set(10, 1, 4);
+
+    eyes(6, 9, 4);
+
+    // arms
+    set(4, 8, 4);
+    set(3, 9, 4);
+    set(11, 8, 4);
+    set(12, 9, 4);
+
+    // legs
+    fill(5, 12, 6, 15, 4);
+    fill(9, 12, 10, 15, 4);
+
+    // devil tail
+    set(11, 11, 3);
+    set(12, 12, 3);
+    set(13, 11, 4);
+    set(14, 10, 4);
+
+    return grid;
   }
 
   return grid;
 }
 
-// ---------------- PET AVATAR ----------------
+/* =========================================================
+   PET AVATAR
+   ========================================================= */
 
 export function PetAvatar({
   tier,
@@ -773,69 +967,9 @@ export function PetAvatar({
 }) {
   const c = TIER_COLORS[tier];
 
-  /*
-   * Start with the tier's normal palette.
-   */
-  const basePalette =
-    PIXEL_PALETTES[tier] ?? PIXEL_PALETTES.Worthless;
-
-  /*
-   * IMPORTANT:
-   * Use the pet's unique spriteSeed to generate its
-   * individual color variation.
-   *
-   * This means two "Worthless" pets can have completely
-   * different colors while still keeping the Worthless
-   * tier's general color identity.
-   */
-  const colorRng = makeRng(spriteSeed + 987654321);
-
-  const palette = [...basePalette];
-
-  /*
-   * Modify each palette color using the sprite seed.
-   * Because the RNG is seeded, the same pet always gets
-   * the same colors.
-   */
-  for (let i = 1; i < palette.length; i++) {
-    const hex = palette[i];
-
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-
-    /*
-     * Generate a random color specifically for this pet.
-     */
-    const seedColor = [
-      Math.floor(colorRng() * 255),
-      Math.floor(colorRng() * 255),
-      Math.floor(colorRng() * 255),
-    ];
-
-    /*
-     * Keep the darkest color mostly intact so eyes/details
-     * remain visible.
-     */
-    const mix = i === 5 ? 0.15 : 0.35;
-
-    const nr = Math.round(
-      r * (1 - mix) + seedColor[0] * mix
-    );
-
-    const ng = Math.round(
-      g * (1 - mix) + seedColor[1] * mix
-    );
-
-    const nb = Math.round(
-      b * (1 - mix) + seedColor[2] * mix
-    );
-
-    palette[i] =
-      `#${nr.toString(16).padStart(2, "0")}` +
-      `${ng.toString(16).padStart(2, "0")}` +
-      `${nb.toString(16).padStart(2, "0")}`;
-  }
+  const palette =
+    PIXEL_PALETTES[tier] ??
+    PIXEL_PALETTES.Worthless;
 
   const sprite = generateCreature(
     spriteSeed,
@@ -854,7 +988,7 @@ export function PetAvatar({
       }}
     >
       <div
-        className="absolute inset-0"
+        className="absolute"
         style={{
           width: px * GRID,
           height: px * GRID,
@@ -868,7 +1002,9 @@ export function PetAvatar({
   );
 }
 
-// ---------------- EGGS ----------------
+/* =========================================================
+   EGGS
+   ========================================================= */
 
 const EGG_PALETTES: Record<string, string[]> = {
   worthless: [
@@ -972,7 +1108,8 @@ export function EggVisual({
   size?: number;
 }) {
   const palette =
-    EGG_PALETTES[type] ?? EGG_PALETTES.worthless;
+    EGG_PALETTES[type] ??
+    EGG_PALETTES.worthless;
 
   const px = Math.floor(size / GRID);
 
@@ -1008,7 +1145,9 @@ export function EggVisual({
   );
 }
 
-// ---------------- UI ----------------
+/* =========================================================
+   UI
+   ========================================================= */
 
 export function Spinner({
   size = 20,
