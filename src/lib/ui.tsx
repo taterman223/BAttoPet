@@ -69,10 +69,6 @@ const TIER_BASE_COLORS: Record<Tier, string[]> = {
   Excellent: ["#fff1f2", "#fecdd3", "#fb7185", "#f43f5e", "#be123c", "#4c0519"],
 };
 
-/*
- * Secondary colors make two pets from the same tier
- * visibly different.
- */
 const SECONDARY_COLORS = [
   "#ef4444",
   "#f97316",
@@ -173,10 +169,6 @@ function getBodyType(species: string, random: () => number): BodyType {
     return SPECIES_BODY[species];
   }
 
-  /*
-   * Unknown species still get a deterministic body type
-   * based on their name instead of randomly changing.
-   */
   const types: BodyType[] = [
     "quadruped",
     "dragon",
@@ -190,27 +182,6 @@ function getBodyType(species: string, random: () => number): BodyType {
   ];
 
   return types[Math.floor(random() * types.length)];
-}
-
-function createPalette(
-  tier: Tier,
-  species: string,
-  random: () => number
-) {
-  const base = TIER_BASE_COLORS[tier];
-
-  const secondary =
-    SECONDARY_COLORS[
-      Math.floor(
-        (hashString(species) + Math.floor(random() * 100)) %
-          SECONDARY_COLORS.length
-      )
-    ];
-
-  return {
-    base,
-    secondary,
-  };
 }
 
 function createGrid() {
@@ -285,53 +256,40 @@ function pixelGrid(
    SPECIES SPRITES
    ========================================================= */
 
-function drawDragon(
-  grid: number[],
-  random: () => number
-) {
-  // Body
+function drawDragon(grid: number[], random: () => number) {
   rect(grid, 7, 10, 16, 16, 3);
   rect(grid, 8, 8, 14, 12, 3);
 
-  // Neck
   rect(grid, 11, 5, 14, 10, 3);
 
-  // Head
   rect(grid, 9, 3, 15, 7, 3);
-
-  // Snout
   rect(grid, 8, 5, 11, 7, 3);
 
-  // Horns
   draw(grid, 10, 2, 4);
   draw(grid, 10, 1, 4);
   draw(grid, 14, 2, 4);
   draw(grid, 14, 1, 4);
 
-  // Eyes
   draw(grid, 10, 4, 5);
   draw(grid, 14, 4, 5);
 
-  // Wings
   rect(grid, 3, 7, 7, 13, 2);
   rect(grid, 16, 7, 20, 13, 2);
 
   draw(grid, 3, 7, 0);
   draw(grid, 20, 7, 0);
 
-  // Wing bones
   draw(grid, 4, 8, 4);
   draw(grid, 5, 10, 4);
   draw(grid, 6, 12, 4);
+
   draw(grid, 19, 8, 4);
   draw(grid, 18, 10, 4);
   draw(grid, 17, 12, 4);
 
-  // Legs
   rect(grid, 8, 16, 10, 21, 4);
   rect(grid, 14, 16, 16, 21, 4);
 
-  // Tail
   const tailLength = 3 + Math.floor(random() * 4);
 
   for (let i = 0; i < tailLength; i++) {
@@ -339,25 +297,16 @@ function drawDragon(
     draw(grid, 18 + i, 14 + i, 3);
   }
 
-  // Belly
   rect(grid, 10, 10, 13, 15, 2);
 }
 
-function drawQuadruped(
-  grid: number[],
-  random: () => number
-) {
-  // Large body
+function drawQuadruped(grid: number[], random: () => number) {
   rect(grid, 4, 9, 16, 16, 3);
   rect(grid, 5, 7, 15, 17, 3);
 
-  // Head
   rect(grid, 13, 4, 19, 10, 3);
-
-  // Snout
   rect(grid, 18, 7, 21, 10, 3);
 
-  // Ears
   const ears = Math.floor(random() * 3);
 
   if (ears === 0) {
@@ -368,19 +317,19 @@ function drawQuadruped(
     draw(grid, 15, 2, 4);
     draw(grid, 18, 3, 4);
     draw(grid, 19, 2, 4);
+  } else {
+    draw(grid, 15, 2, 4);
+    draw(grid, 18, 2, 4);
   }
 
-  // Eyes
   draw(grid, 15, 6, 5);
   draw(grid, 18, 6, 5);
 
-  // Legs
   rect(grid, 5, 16, 7, 22, 4);
   rect(grid, 9, 16, 11, 22, 4);
   rect(grid, 14, 16, 16, 22, 4);
   rect(grid, 17, 16, 19, 22, 4);
 
-  // Tail
   const tail = Math.floor(random() * 3);
 
   if (tail === 0) {
@@ -394,14 +343,20 @@ function drawQuadruped(
     rect(grid, 2, 13, 5, 15, 3);
   }
 
-  // Chest highlight
   rect(grid, 13, 10, 15, 14, 2);
+
+  // Extra individual markings
+  for (let i = 0; i < 5; i++) {
+    draw(
+      grid,
+      9 + Math.floor(random() * 6),
+      10 + Math.floor(random() * 5),
+      2
+    );
+  }
 }
 
-function drawSerpent(
-  grid: number[],
-  random: () => number
-) {
+function drawSerpent(grid: number[], random: () => number) {
   const points = [
     [17, 4],
     [16, 6],
@@ -417,58 +372,43 @@ function drawSerpent(
     rect(grid, x - 1, y - 1, x + 1, y + 1, 3);
   }
 
-  // Head
   rect(grid, 15, 2, 20, 6, 3);
 
   draw(grid, 16, 3, 5);
   draw(grid, 19, 3, 5);
 
-  // Tongue
   draw(grid, 21, 5, 4);
   draw(grid, 22, 5, 4);
 
-  // Scales
   for (let i = 0; i < 4; i++) {
     const x = 8 + i * 2;
     const y = 14 - i * 2;
     draw(grid, x, y, random() > 0.5 ? 2 : 4);
   }
 
-  // Tail
   draw(grid, 4, 19, 4);
   draw(grid, 3, 20, 4);
   draw(grid, 2, 20, 4);
 }
 
-function drawAquatic(
-  grid: number[],
-  random: () => number
-) {
-  // Fish/eel body
+function drawAquatic(grid: number[], random: () => number) {
   rect(grid, 5, 8, 18, 15, 3);
   rect(grid, 7, 6, 16, 17, 3);
 
-  // Head
   rect(grid, 15, 7, 20, 14, 3);
 
-  // Eye
   draw(grid, 18, 9, 5);
-
-  // Mouth
   draw(grid, 20, 12, 4);
 
-  // Tail
   draw(grid, 3, 9, 4);
   draw(grid, 2, 8, 4);
   draw(grid, 2, 10, 4);
   draw(grid, 1, 7, 4);
   draw(grid, 1, 11, 4);
 
-  // Fins
   rect(grid, 9, 5, 13, 7, 2);
   rect(grid, 10, 15, 14, 18, 2);
 
-  // Water markings
   for (let i = 0; i < 5; i++) {
     const x = 6 + Math.floor(random() * 10);
     const y = 10 + Math.floor(random() * 5);
@@ -477,47 +417,35 @@ function drawAquatic(
   }
 }
 
-function drawAvian(
-  grid: number[],
-  random: () => number
-) {
-  // Body
+function drawAvian(grid: number[], random: () => number) {
   rect(grid, 8, 8, 15, 17, 3);
   rect(grid, 9, 6, 14, 18, 3);
 
-  // Head
   rect(grid, 10, 3, 15, 8, 3);
 
-  // Beak
   draw(grid, 16, 5, 4);
   draw(grid, 17, 6, 4);
 
-  // Eyes
   draw(grid, 11, 5, 5);
   draw(grid, 14, 5, 5);
 
-  // Left wing
   rect(grid, 3, 8, 8, 15, 2);
   draw(grid, 2, 9, 2);
   draw(grid, 1, 10, 2);
   draw(grid, 2, 13, 4);
 
-  // Right wing
   rect(grid, 15, 8, 20, 15, 2);
   draw(grid, 21, 9, 2);
   draw(grid, 22, 10, 2);
   draw(grid, 21, 13, 4);
 
-  // Tail feathers
   draw(grid, 8, 15, 4);
   draw(grid, 7, 17, 4);
   draw(grid, 6, 19, 4);
 
-  // Legs
   rect(grid, 9, 17, 10, 21, 4);
   rect(grid, 13, 17, 14, 21, 4);
 
-  // Random feather markings
   for (let i = 0; i < 4; i++) {
     draw(
       grid,
@@ -528,31 +456,22 @@ function drawAvian(
   }
 }
 
-function drawInsect(
-  grid: number[],
-  random: () => number
-) {
-  // Head
+function drawInsect(grid: number[], random: () => number) {
   rect(grid, 9, 4, 14, 8, 3);
 
-  // Eyes
   draw(grid, 10, 5, 5);
   draw(grid, 13, 5, 5);
 
-  // Thorax
   rect(grid, 8, 7, 15, 12, 3);
 
-  // Abdomen
   rect(grid, 8, 11, 15, 18, 4);
   rect(grid, 9, 18, 14, 20, 4);
 
-  // Antennae
   draw(grid, 9, 3, 4);
   draw(grid, 8, 2, 4);
   draw(grid, 14, 3, 4);
   draw(grid, 15, 2, 4);
 
-  // Wings
   rect(grid, 3, 7, 8, 14, 2);
   rect(grid, 15, 7, 20, 14, 2);
 
@@ -564,7 +483,6 @@ function drawInsect(
   draw(grid, 22, 9, 2);
   draw(grid, 21, 13, 4);
 
-  // Legs
   for (let y = 9; y <= 15; y += 2) {
     draw(grid, 6, y, 4);
     draw(grid, 5, y + 1, 4);
@@ -572,13 +490,11 @@ function drawInsect(
     draw(grid, 18, y + 1, 4);
   }
 
-  // Abdomen stripes
   for (let y = 13; y <= 18; y += 2) {
     draw(grid, 8, y, 5);
     draw(grid, 15, y, 5);
   }
 
-  // Random wing spots
   for (let i = 0; i < 5; i++) {
     draw(
       grid,
@@ -589,21 +505,15 @@ function drawInsect(
   }
 }
 
-function drawSpider(
-  grid: number[],
-  random: () => number
-) {
-  // Body
+function drawSpider(grid: number[], random: () => number) {
   rect(grid, 8, 8, 15, 16, 3);
   rect(grid, 9, 6, 14, 10, 4);
 
-  // Eyes
   draw(grid, 10, 8, 5);
   draw(grid, 13, 8, 5);
   draw(grid, 11, 7, 5);
   draw(grid, 12, 7, 5);
 
-  // Legs
   const legs = [
     [-1, -1],
     [-2, 0],
@@ -623,7 +533,6 @@ function drawSpider(
     draw(grid, 15 + dx * 3, 11 + dy * 2, 4);
   }
 
-  // Random markings
   for (let i = 0; i < 5; i++) {
     draw(
       grid,
@@ -634,10 +543,7 @@ function drawSpider(
   }
 }
 
-function drawBlob(
-  grid: number[],
-  random: () => number
-) {
+function drawBlob(grid: number[], random: () => number) {
   const wobble = Math.floor(random() * 3);
 
   for (let y = 5; y <= 18; y++) {
@@ -655,23 +561,19 @@ function drawBlob(
     }
   }
 
-  // Eyes
   draw(grid, 8, 10, 5);
   draw(grid, 14, 10, 5);
 
-  // Highlight
   draw(grid, 7, 7, 1);
   draw(grid, 8, 7, 1);
   draw(grid, 7, 8, 1);
 
-  // Drips
   draw(grid, 6, 18, 4);
   draw(grid, 6, 19, 4);
   draw(grid, 11, 18, 4);
   draw(grid, 15, 18, 4);
   draw(grid, 15, 19, 4);
 
-  // Random spots
   for (let i = 0; i < 5; i++) {
     draw(
       grid,
@@ -682,21 +584,14 @@ function drawBlob(
   }
 }
 
-function drawBiped(
-  grid: number[],
-  random: () => number
-) {
-  // Body
+function drawBiped(grid: number[], random: () => number) {
   rect(grid, 8, 9, 15, 17, 3);
 
-  // Head
   rect(grid, 8, 3, 15, 9, 3);
 
-  // Eyes
   draw(grid, 10, 6, 5);
   draw(grid, 13, 6, 5);
 
-  // Ears/horns
   if (random() > 0.5) {
     draw(grid, 8, 3, 4);
     draw(grid, 7, 2, 4);
@@ -704,15 +599,12 @@ function drawBiped(
     draw(grid, 16, 2, 4);
   }
 
-  // Arms
   rect(grid, 5, 10, 8, 14, 4);
   rect(grid, 15, 10, 18, 14, 4);
 
-  // Legs
   rect(grid, 9, 17, 11, 22, 4);
   rect(grid, 13, 17, 15, 22, 4);
 
-  // Body markings
   for (let i = 0; i < 5; i++) {
     draw(
       grid,
@@ -732,12 +624,6 @@ function generateCreature(
   species: string,
   tier: Tier
 ) {
-  /*
-   * IMPORTANT:
-   * Species is included in the seed.
-   * This means two pets with similar seeds but different
-   * species will still look different.
-   */
   const combinedSeed =
     (seed ^ hashString(species)) >>> 0;
 
@@ -784,10 +670,6 @@ function generateCreature(
       break;
   }
 
-  /*
-   * Different pets get different accent colors.
-   * Tier controls the main body color.
-   */
   const tierColors = TIER_BASE_COLORS[tier];
 
   const accent =
@@ -796,14 +678,10 @@ function generateCreature(
     ];
 
   /*
-   * Palette indexes:
-   *
-   * 0 = transparent
-   * 1 = highlight
-   * 2 = light/accent
-   * 3 = body
-   * 4 = dark
-   * 5 = eyes
+   * IMPORTANT:
+   * Return BOTH the sprite grid AND palette.
+   * The old code only returned the palette,
+   * which caused PetAvatar to have no actual sprite pattern.
    */
   const palette = [
     "transparent",
@@ -814,8 +692,15 @@ function generateCreature(
     "#111827",
   ];
 
-  return palette;
+  return {
+    grid,
+    palette,
+  };
 }
+
+/* =========================================================
+   PET AVATAR
+   ========================================================= */
 
 export function PetAvatar({
   tier,
@@ -830,11 +715,6 @@ export function PetAvatar({
 }) {
   const colors = TIER_COLORS[tier];
 
-  /*
-   * Safety fallback:
-   * If Supabase somehow gives us null/invalid seed,
-   * we still generate a visible sprite.
-   */
   const safeSeed =
     Number.isFinite(spriteSeed)
       ? spriteSeed
@@ -846,7 +726,15 @@ export function PetAvatar({
     tier
   );
 
-  const px = Math.max(2, Math.floor(size / GRID));
+  /*
+   * Keep the sprite comfortably inside the box.
+   */
+  const px = Math.max(
+    1,
+    Math.floor((size * 0.72) / GRID)
+  );
+
+  const spriteSize = px * GRID;
 
   return (
     <div
@@ -865,21 +753,25 @@ export function PetAvatar({
           height: size * 0.65,
           left: size * 0.175,
           top: size * 0.175,
-          background: sprite[2],
+          background: sprite.palette[2],
         }}
       />
 
-      {/* Sprite */}
+      {/* ACTUAL SPRITE */}
       <div
         className="absolute"
         style={{
-          width: px * GRID,
-          height: px * GRID,
-          left: (size - px * GRID) / 2,
-          top: (size - px * GRID) / 2,
+          width: spriteSize,
+          height: spriteSize,
+          left: (size - spriteSize) / 2,
+          top: (size - spriteSize) / 2,
         }}
       >
-        {pixelGrid(sprite, sprite, px)}
+        {pixelGrid(
+          sprite.grid,
+          sprite.palette,
+          px
+        )}
       </div>
     </div>
   );
