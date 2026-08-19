@@ -1,9 +1,18 @@
 import type { Tier } from "./supabase";
 import { TIER_COLORS } from "./supabase";
 
-export function TierBadge({ tier, size = "md" }: { tier: Tier; size?: "sm" | "md" }) {
+export function TierBadge({
+  tier,
+  size = "md",
+}: {
+  tier: Tier;
+  size?: "sm" | "md";
+}) {
   const c = TIER_COLORS[tier];
-  const pad = size === "sm" ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs";
+  const pad =
+    size === "sm"
+      ? "px-2 py-0.5 text-[10px]"
+      : "px-2.5 py-1 text-xs";
 
   return (
     <span
@@ -29,7 +38,9 @@ export function StatBar({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] text-slate-500 w-16 shrink-0">{label}</span>
+      <span className="text-[11px] text-slate-500 w-16 shrink-0">
+        {label}
+      </span>
 
       <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
         <div
@@ -46,7 +57,7 @@ export function StatBar({
 }
 
 /*
- * Each tier now has a noticeably different, colorful palette.
+ * Each tier has a different base palette.
  *
  * Palette indexes:
  * 0 = transparent/background
@@ -114,7 +125,7 @@ const PIXEL_PALETTES: Record<string, string[]> = {
 
 const GRID = 16;
 
-// Seeded PRNG (mulberry32)
+// Seeded PRNG
 function makeRng(seed: number) {
   let s = seed >>> 0;
 
@@ -137,7 +148,6 @@ type BodyType =
   | "avian"
   | "insect";
 
-// Map species name to a body type
 const SPECIES_BODY: Record<string, BodyType> = {
   "Flame Drake": "biped",
   "Crystal Fox": "quadruped",
@@ -181,8 +191,13 @@ const SPECIES_BODY: Record<string, BodyType> = {
   "Spark Finch": "avian",
 };
 
-function getBodyType(species: string, rng: () => number): BodyType {
-  if (SPECIES_BODY[species]) return SPECIES_BODY[species];
+function getBodyType(
+  species: string,
+  rng: () => number
+): BodyType {
+  if (SPECIES_BODY[species]) {
+    return SPECIES_BODY[species];
+  }
 
   const types: BodyType[] = [
     "quadruped",
@@ -230,16 +245,24 @@ function pixelGrid(
   return cells;
 }
 
-// --- Procedural creature generation ---
+// ---------------- CREATURE GENERATION ----------------
 
-function generateCreature(seed: number, species: string): number[] {
+function generateCreature(
+  seed: number,
+  species: string
+): number[] {
   const rng = makeRng(seed);
   const body = getBodyType(species, rng);
 
   const grid = new Array(GRID * GRID).fill(0);
 
   const set = (x: number, y: number, v: number) => {
-    if (x >= 0 && x < GRID && y >= 0 && y < GRID) {
+    if (
+      x >= 0 &&
+      x < GRID &&
+      y >= 0 &&
+      y < GRID
+    ) {
       grid[y * GRID + x] = v;
     }
   };
@@ -258,7 +281,6 @@ function generateCreature(seed: number, species: string): number[] {
     }
   };
 
-  // Feature toggles from seed
   const hasHorns = rng() > 0.4;
   const hasWings = rng() > 0.5;
   const hasTail = rng() > 0.2;
@@ -277,7 +299,6 @@ function generateCreature(seed: number, species: string): number[] {
 
     fill(bodyL, bodyTop, bodyR, bodyBot, 3);
 
-    // Round body edges
     set(bodyL, bodyTop, 0);
     set(bodyR, bodyTop, 0);
     set(bodyL, bodyTop + 1, 3);
@@ -287,6 +308,7 @@ function generateCreature(seed: number, species: string): number[] {
 
     // Head
     fill(9, 4, 13, 7, 3);
+
     set(9, 4, 0);
     set(13, 4, 0);
 
@@ -325,7 +347,6 @@ function generateCreature(seed: number, species: string): number[] {
       set(13, 4, 4);
     }
 
-    // Head highlight
     set(10, 4, 1);
 
     // Legs
@@ -340,10 +361,6 @@ function generateCreature(seed: number, species: string): number[] {
 
       for (let i = 0; i < tailLen; i++) {
         set(2 - i, bodyTop + i, 3);
-
-        if (2 - i >= 0) {
-          set(2 - i, bodyTop + i, 3);
-        }
       }
 
       if (rng() > 0.5) {
@@ -439,7 +456,6 @@ function generateCreature(seed: number, species: string): number[] {
       set(15, 10, 0);
     }
 
-    // Body highlight
     set(5, 7, 1);
     set(6, 7, 1);
 
@@ -470,7 +486,6 @@ function generateCreature(seed: number, species: string): number[] {
       set(x + 1, y, 3);
     }
 
-    // Thicker body
     for (let i = 0; i < points.length - 1; i++) {
       const [x, y] = points[i];
 
@@ -501,10 +516,9 @@ function generateCreature(seed: number, species: string): number[] {
       set(11, 2, 4);
     }
 
-    // Highlight
     set(12, 2, 1);
 
-    // Tail tip
+    // Tail
     set(2, 14, 4);
     set(1, 14, 4);
 
@@ -578,7 +592,7 @@ function generateCreature(seed: number, species: string): number[] {
     set(6, 5, 1);
     set(7, 4, 1);
 
-    // Appendages
+    // Horns
     if (hasHorns) {
       set(5, 2, 4);
       set(11, 2, 4);
@@ -645,7 +659,7 @@ function generateCreature(seed: number, species: string): number[] {
     set(8, 14, 4);
     set(10, 14, 4);
 
-    // Tail feathers
+    // Tail
     if (hasTail) {
       set(4, 10, 3);
       set(3, 11, 3);
@@ -658,7 +672,6 @@ function generateCreature(seed: number, species: string): number[] {
       set(9, 2, 4);
     }
 
-    // Body highlight
     set(6, 6, 1);
 
     if (bodyPattern === 3) {
@@ -745,6 +758,8 @@ function generateCreature(seed: number, species: string): number[] {
   return grid;
 }
 
+// ---------------- PET AVATAR ----------------
+
 export function PetAvatar({
   tier,
   species,
@@ -758,11 +773,75 @@ export function PetAvatar({
 }) {
   const c = TIER_COLORS[tier];
 
-  // Use the colorful palette for the pet's tier
-  const palette =
+  /*
+   * Start with the tier's normal palette.
+   */
+  const basePalette =
     PIXEL_PALETTES[tier] ?? PIXEL_PALETTES.Worthless;
 
-  const sprite = generateCreature(spriteSeed, species);
+  /*
+   * IMPORTANT:
+   * Use the pet's unique spriteSeed to generate its
+   * individual color variation.
+   *
+   * This means two "Worthless" pets can have completely
+   * different colors while still keeping the Worthless
+   * tier's general color identity.
+   */
+  const colorRng = makeRng(spriteSeed + 987654321);
+
+  const palette = [...basePalette];
+
+  /*
+   * Modify each palette color using the sprite seed.
+   * Because the RNG is seeded, the same pet always gets
+   * the same colors.
+   */
+  for (let i = 1; i < palette.length; i++) {
+    const hex = palette[i];
+
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+
+    /*
+     * Generate a random color specifically for this pet.
+     */
+    const seedColor = [
+      Math.floor(colorRng() * 255),
+      Math.floor(colorRng() * 255),
+      Math.floor(colorRng() * 255),
+    ];
+
+    /*
+     * Keep the darkest color mostly intact so eyes/details
+     * remain visible.
+     */
+    const mix = i === 5 ? 0.15 : 0.35;
+
+    const nr = Math.round(
+      r * (1 - mix) + seedColor[0] * mix
+    );
+
+    const ng = Math.round(
+      g * (1 - mix) + seedColor[1] * mix
+    );
+
+    const nb = Math.round(
+      b * (1 - mix) + seedColor[2] * mix
+    );
+
+    palette[i] =
+      `#${nr.toString(16).padStart(2, "0")}` +
+      `${ng.toString(16).padStart(2, "0")}` +
+      `${nb.toString(16).padStart(2, "0")}`;
+  }
+
+  const sprite = generateCreature(
+    spriteSeed,
+    species
+  );
+
   const px = Math.floor(size / GRID);
 
   return (
@@ -788,6 +867,8 @@ export function PetAvatar({
     </div>
   );
 }
+
+// ---------------- EGGS ----------------
 
 const EGG_PALETTES: Record<string, string[]> = {
   worthless: [
@@ -845,7 +926,6 @@ const EGG_PALETTES: Record<string, string[]> = {
   ],
 };
 
-// Proper egg shape
 const EGG_SPRITE: number[] = [
   0,0,0,0,0,3,3,3,3,3,3,0,0,0,0,0,
   0,0,0,0,3,3,3,3,3,3,3,3,0,0,0,0,
@@ -928,7 +1008,13 @@ export function EggVisual({
   );
 }
 
-export function Spinner({ size = 20 }: { size?: number }) {
+// ---------------- UI ----------------
+
+export function Spinner({
+  size = 20,
+}: {
+  size?: number;
+}) {
   return (
     <div
       className="border-2 border-slate-300 border-t-sky-500 rounded-full animate-spin"
@@ -951,7 +1037,9 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="text-slate-300 mb-3">{icon}</div>
+      <div className="text-slate-300 mb-3">
+        {icon}
+      </div>
 
       <p className="text-slate-600 font-medium">
         {title}
