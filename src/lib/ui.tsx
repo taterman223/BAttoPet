@@ -1,6 +1,10 @@
 import type { Tier } from "./supabase";
 import { TIER_COLORS } from "./supabase";
 
+/* =========================================================
+   TIER BADGE
+   ========================================================= */
+
 export function TierBadge({
   tier,
   size = "md",
@@ -9,8 +13,11 @@ export function TierBadge({
   size?: "sm" | "md";
 }) {
   const c = TIER_COLORS[tier];
+
   const pad =
-    size === "sm" ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs";
+    size === "sm"
+      ? "px-2 py-0.5 text-[10px]"
+      : "px-2.5 py-1 text-xs";
 
   return (
     <span
@@ -20,6 +27,10 @@ export function TierBadge({
     </span>
   );
 }
+
+/* =========================================================
+   STAT BAR
+   ========================================================= */
 
 export function StatBar({
   label,
@@ -32,7 +43,10 @@ export function StatBar({
   max: number;
   color: string;
 }) {
-  const pct = Math.min(100, Math.max(0, (value / max) * 100));
+  const pct = Math.min(
+    100,
+    Math.max(0, (value / max) * 100)
+  );
 
   return (
     <div className="flex items-center gap-2">
@@ -55,34 +69,96 @@ export function StatBar({
 }
 
 /* =========================================================
-   PET SPRITE SYSTEM
+   PIXEL SPRITE SYSTEM
    ========================================================= */
 
 const GRID = 24;
 
-const TIER_BASE_COLORS: Record<Tier, string[]> = {
-  Worthless: ["#fff7ed", "#fed7aa", "#fb923c", "#f97316", "#c2410c", "#431407"],
-  Average: ["#f5f3ff", "#ddd6fe", "#a78bfa", "#8b5cf6", "#6d28d9", "#2e1065"],
-  Decent: ["#f0fdf4", "#bbf7d0", "#4ade80", "#22c55e", "#15803d", "#14532d"],
-  Good: ["#eff6ff", "#bfdbfe", "#60a5fa", "#3b82f6", "#1d4ed8", "#172554"],
-  Fabulous: ["#fffbeb", "#fde68a", "#fbbf24", "#f59e0b", "#d97706", "#78350f"],
-  Excellent: ["#fff1f2", "#fecdd3", "#fb7185", "#f43f5e", "#be123c", "#4c0519"],
+type BodyType =
+  | "dragon"
+  | "quadruped"
+  | "serpent"
+  | "avian"
+  | "insect"
+  | "blob"
+  | "aquatic"
+  | "spider"
+  | "biped";
+
+/*
+ * Species -> body.
+ *
+ * This is intentionally based on species instead of rarity.
+ * Rarity should change special details, not completely change
+ * what the animal is.
+ */
+const SPECIES_BODY: Record<string, BodyType> = {
+  "Flame Drake": "dragon",
+  "Shadowwing": "dragon",
+  "Storm Serpent": "serpent",
+
+  "Static Eel": "aquatic",
+  "Wraith Koi": "aquatic",
+  "Coral Newt": "aquatic",
+  "Tide Kraken": "aquatic",
+  "Tide Urchin": "aquatic",
+
+  "Aether Moth": "insect",
+  "Dune Beetle": "insect",
+  "Glass Mantis": "insect",
+
+  "Hex Scorpion": "spider",
+  "Shard Crab": "spider",
+
+  "Void Owl": "avian",
+  "Cinder Bat": "avian",
+  "Ash Raven": "avian",
+  "Dusk Falcon": "avian",
+  "Plume Heron": "avian",
+  "Gale Sparrow": "avian",
+  "Spark Finch": "avian",
+
+  "Crystal Fox": "quadruped",
+  "Shadow Lynx": "quadruped",
+  "Frost Hound": "quadruped",
+  "Thorn Boar": "quadruped",
+  "Cloud Ram": "quadruped",
+  "Rust Hound": "quadruped",
+  "Bolt Weasel": "quadruped",
+  "Ember Lynx": "quadruped",
+  "Frost Stag": "quadruped",
+  "Quartz Badger": "quadruped",
+  "Smog Rat": "quadruped",
+  "Magma Toad": "quadruped",
+  "Bramble Stag": "quadruped",
+
+  "Vine Python": "serpent",
+
+  "Ember Sprite": "blob",
+  "Glimmer Slime": "blob",
+  "Lumen Jelly": "blob",
+  "Frost Wisp": "blob",
+  "Gloom Fern": "blob",
+
+  "Moss Golem": "biped",
+  "Marsh Imp": "biped",
 };
 
-const SECONDARY_COLORS = [
-  "#ef4444",
-  "#f97316",
-  "#eab308",
-  "#22c55e",
-  "#06b6d4",
-  "#3b82f6",
-  "#6366f1",
-  "#8b5cf6",
-  "#ec4899",
-  "#14b8a6",
-  "#84cc16",
-  "#f43f5e",
+const BODY_TYPES: BodyType[] = [
+  "quadruped",
+  "dragon",
+  "serpent",
+  "avian",
+  "insect",
+  "blob",
+  "aquatic",
+  "spider",
+  "biped",
 ];
+
+/* =========================================================
+   RANDOM
+   ========================================================= */
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -91,10 +167,20 @@ function rng(seed: number) {
     s += 0x6d2b79f5;
 
     let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
 
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    t = Math.imul(
+      t ^ (t >>> 15),
+      t | 1
+    );
+
+    t ^= t + Math.imul(
+      t ^ (t >>> 7),
+      t | 61
+    );
+
+    return (
+      (t ^ (t >>> 14)) >>> 0
+    ) / 4294967296;
   };
 }
 
@@ -109,80 +195,9 @@ function hashString(str: string) {
   return h >>> 0;
 }
 
-type BodyType =
-  | "dragon"
-  | "quadruped"
-  | "serpent"
-  | "avian"
-  | "insect"
-  | "blob"
-  | "aquatic"
-  | "spider"
-  | "biped";
-
-const SPECIES_BODY: Record<string, BodyType> = {
-  "Flame Drake": "dragon",
-  "Shadowwing": "dragon",
-  "Storm Serpent": "serpent",
-  "Static Eel": "aquatic",
-  "Wraith Koi": "aquatic",
-  "Aether Moth": "insect",
-  "Dune Beetle": "insect",
-  "Hex Scorpion": "spider",
-  "Glass Mantis": "insect",
-  "Shard Crab": "spider",
-  "Void Owl": "avian",
-  "Cinder Bat": "avian",
-  "Ash Raven": "avian",
-  "Dusk Falcon": "avian",
-  "Plume Heron": "avian",
-  "Gale Sparrow": "avian",
-  "Spark Finch": "avian",
-  "Crystal Fox": "quadruped",
-  "Shadow Lynx": "quadruped",
-  "Frost Hound": "quadruped",
-  "Thorn Boar": "quadruped",
-  "Cloud Ram": "quadruped",
-  "Rust Hound": "quadruped",
-  "Bolt Weasel": "quadruped",
-  "Ember Lynx": "quadruped",
-  "Frost Stag": "quadruped",
-  "Quartz Badger": "quadruped",
-  "Smog Rat": "quadruped",
-  "Coral Newt": "aquatic",
-  "Tide Kraken": "aquatic",
-  "Tide Urchin": "aquatic",
-  "Magma Toad": "quadruped",
-  "Moss Golem": "biped",
-  "Ember Sprite": "blob",
-  "Glimmer Slime": "blob",
-  "Lumen Jelly": "blob",
-  "Frost Wisp": "blob",
-  "Gloom Fern": "blob",
-  "Marsh Imp": "biped",
-  "Bramble Stag": "quadruped",
-  "Vine Python": "serpent",
-};
-
-function getBodyType(species: string, random: () => number): BodyType {
-  if (SPECIES_BODY[species]) {
-    return SPECIES_BODY[species];
-  }
-
-  const types: BodyType[] = [
-    "quadruped",
-    "dragon",
-    "serpent",
-    "avian",
-    "insect",
-    "blob",
-    "aquatic",
-    "spider",
-    "biped",
-  ];
-
-  return types[Math.floor(random() * types.length)];
-}
+/* =========================================================
+   GRID HELPERS
+   ========================================================= */
 
 function createGrid() {
   return new Array(GRID * GRID).fill(0) as number[];
@@ -243,7 +258,8 @@ function pixelGrid(
           top: y * px,
           width: px,
           height: px,
-          background: palette[value] ?? palette[1],
+          background:
+            palette[value] ?? palette[1],
         }}
       />
     );
@@ -253,83 +269,454 @@ function pixelGrid(
 }
 
 /* =========================================================
-   SPECIES SPRITES
+   COLOR SYSTEM
    ========================================================= */
 
-function drawDragon(grid: number[], random: () => number) {
-  rect(grid, 7, 10, 16, 16, 3);
-  rect(grid, 8, 8, 14, 12, 3);
+/*
+ * These palettes are species-friendly instead of simply
+ * using the tier color as the entire creature.
+ */
 
-  rect(grid, 11, 5, 14, 10, 3);
+const SPECIES_PALETTES: Record<
+  string,
+  {
+    main: string;
+    light: string;
+    dark: string;
+    accent: string;
+  }
+> = {
+  "Flame Drake": {
+    main: "#e25822",
+    light: "#ffb347",
+    dark: "#7f1d1d",
+    accent: "#ffd166",
+  },
 
-  rect(grid, 9, 3, 15, 7, 3);
-  rect(grid, 8, 5, 11, 7, 3);
+  "Shadowwing": {
+    main: "#475569",
+    light: "#94a3b8",
+    dark: "#171717",
+    accent: "#a78bfa",
+  },
 
-  draw(grid, 10, 2, 4);
+  "Storm Serpent": {
+    main: "#2563eb",
+    light: "#93c5fd",
+    dark: "#172554",
+    accent: "#67e8f9",
+  },
+
+  "Static Eel": {
+    main: "#0ea5a4",
+    light: "#5eead4",
+    dark: "#134e4a",
+    accent: "#facc15",
+  },
+
+  "Wraith Koi": {
+    main: "#64748b",
+    light: "#e2e8f0",
+    dark: "#1e293b",
+    accent: "#c084fc",
+  },
+
+  "Aether Moth": {
+    main: "#8b5cf6",
+    light: "#c4b5fd",
+    dark: "#4c1d95",
+    accent: "#67e8f9",
+  },
+
+  "Dune Beetle": {
+    main: "#a16207",
+    light: "#fde68a",
+    dark: "#422006",
+    accent: "#f59e0b",
+  },
+
+  "Glass Mantis": {
+    main: "#14b8a6",
+    light: "#99f6e4",
+    dark: "#134e4a",
+    accent: "#e0f2fe",
+  },
+
+  "Hex Scorpion": {
+    main: "#7c3aed",
+    light: "#c4b5fd",
+    dark: "#2e1065",
+    accent: "#f43f5e",
+  },
+
+  "Shard Crab": {
+    main: "#ef4444",
+    light: "#fca5a5",
+    dark: "#7f1d1d",
+    accent: "#facc15",
+  },
+
+  "Void Owl": {
+    main: "#334155",
+    light: "#94a3b8",
+    dark: "#020617",
+    accent: "#c084fc",
+  },
+
+  "Cinder Bat": {
+    main: "#7c2d12",
+    light: "#fb923c",
+    dark: "#431407",
+    accent: "#fde047",
+  },
+
+  "Ash Raven": {
+    main: "#52525b",
+    light: "#a1a1aa",
+    dark: "#18181b",
+    accent: "#60a5fa",
+  },
+
+  "Dusk Falcon": {
+    main: "#6366f1",
+    light: "#a5b4fc",
+    dark: "#312e81",
+    accent: "#f472b6",
+  },
+
+  "Plume Heron": {
+    main: "#0891b2",
+    light: "#a5f3fc",
+    dark: "#164e63",
+    accent: "#f8fafc",
+  },
+
+  "Gale Sparrow": {
+    main: "#64748b",
+    light: "#cbd5e1",
+    dark: "#334155",
+    accent: "#38bdf8",
+  },
+
+  "Spark Finch": {
+    main: "#eab308",
+    light: "#fef08a",
+    dark: "#713f12",
+    accent: "#f97316",
+  },
+
+  "Crystal Fox": {
+    main: "#f97316",
+    light: "#fed7aa",
+    dark: "#7c2d12",
+    accent: "#67e8f9",
+  },
+
+  "Shadow Lynx": {
+    main: "#52525b",
+    light: "#a1a1aa",
+    dark: "#18181b",
+    accent: "#8b5cf6",
+  },
+
+  "Frost Hound": {
+    main: "#60a5fa",
+    light: "#dbeafe",
+    dark: "#1e3a8a",
+    accent: "#e0f2fe",
+  },
+
+  "Thorn Boar": {
+    main: "#65a30d",
+    light: "#bef264",
+    dark: "#365314",
+    accent: "#92400e",
+  },
+
+  "Cloud Ram": {
+    main: "#cbd5e1",
+    light: "#ffffff",
+    dark: "#64748b",
+    accent: "#93c5fd",
+  },
+
+  "Rust Hound": {
+    main: "#b45309",
+    light: "#fdba74",
+    dark: "#451a03",
+    accent: "#eab308",
+  },
+
+  "Bolt Weasel": {
+    main: "#0891b2",
+    light: "#67e8f9",
+    dark: "#164e63",
+    accent: "#facc15",
+  },
+
+  "Ember Lynx": {
+    main: "#dc2626",
+    light: "#fca5a5",
+    dark: "#7f1d1d",
+    accent: "#fbbf24",
+  },
+
+  "Frost Stag": {
+    main: "#38bdf8",
+    light: "#e0f2fe",
+    dark: "#075985",
+    accent: "#c4b5fd",
+  },
+
+  "Quartz Badger": {
+    main: "#78716c",
+    light: "#d6d3d1",
+    dark: "#292524",
+    accent: "#a78bfa",
+  },
+
+  "Smog Rat": {
+    main: "#4b5563",
+    light: "#9ca3af",
+    dark: "#1f2937",
+    accent: "#84cc16",
+  },
+
+  "Coral Newt": {
+    main: "#f97316",
+    light: "#fdba74",
+    dark: "#9a3412",
+    accent: "#22d3ee",
+  },
+
+  "Tide Kraken": {
+    main: "#2563eb",
+    light: "#93c5fd",
+    dark: "#172554",
+    accent: "#a78bfa",
+  },
+
+  "Tide Urchin": {
+    main: "#db2777",
+    light: "#f9a8d4",
+    dark: "#831843",
+    accent: "#22d3ee",
+  },
+
+  "Magma Toad": {
+    main: "#dc2626",
+    light: "#fb923c",
+    dark: "#450a0a",
+    accent: "#fde047",
+  },
+
+  "Moss Golem": {
+    main: "#65a30d",
+    light: "#bef264",
+    dark: "#365314",
+    accent: "#a16207",
+  },
+
+  "Ember Sprite": {
+    main: "#f97316",
+    light: "#fed7aa",
+    dark: "#9a3412",
+    accent: "#fde047",
+  },
+
+  "Glimmer Slime": {
+    main: "#22c55e",
+    light: "#bbf7d0",
+    dark: "#166534",
+    accent: "#67e8f9",
+  },
+
+  "Lumen Jelly": {
+    main: "#06b6d4",
+    light: "#a5f3fc",
+    dark: "#155e75",
+    accent: "#f0abfc",
+  },
+
+  "Frost Wisp": {
+    main: "#38bdf8",
+    light: "#e0f2fe",
+    dark: "#075985",
+    accent: "#c4b5fd",
+  },
+
+  "Gloom Fern": {
+    main: "#166534",
+    light: "#86efac",
+    dark: "#052e16",
+    accent: "#a78bfa",
+  },
+
+  "Marsh Imp": {
+    main: "#84cc16",
+    light: "#d9f99d",
+    dark: "#365314",
+    accent: "#f97316",
+  },
+
+  "Bramble Stag": {
+    main: "#15803d",
+    light: "#86efac",
+    dark: "#14532d",
+    accent: "#a16207",
+  },
+
+  "Vine Python": {
+    main: "#16a34a",
+    light: "#86efac",
+    dark: "#14532d",
+    accent: "#facc15",
+  },
+};
+
+function getPalette(
+  species: string,
+  tier: Tier,
+  random: () => number
+) {
+  const base =
+    SPECIES_PALETTES[species] ?? {
+      main: "#64748b",
+      light: "#cbd5e1",
+      dark: "#334155",
+      accent: "#38bdf8",
+    };
+
+  /*
+   * Only a small chance of a variant.
+   * This prevents every pet of the same species from looking
+   * completely identical while keeping the species recognizable.
+   */
+  const variant = random();
+
+  if (variant < 0.12) {
+    return {
+      ...base,
+      accent: "#f472b6",
+    };
+  }
+
+  if (variant < 0.24) {
+    return {
+      ...base,
+      accent: "#facc15",
+    };
+  }
+
+  if (variant < 0.32) {
+    return {
+      ...base,
+      accent: "#67e8f9",
+    };
+  }
+
+  return base;
+}
+
+/* =========================================================
+   SPECIES DRAWINGS
+   ========================================================= */
+
+function drawDragon(
+  grid: number[],
+  random: () => number
+) {
+  /* body */
+  rect(grid, 7, 9, 17, 17, 3);
+  rect(grid, 9, 7, 15, 18, 3);
+
+  /* neck */
+  rect(grid, 12, 5, 15, 10, 3);
+
+  /* head */
+  rect(grid, 9, 2, 16, 7, 3);
+  rect(grid, 8, 4, 17, 8, 3);
+
+  /* horns */
   draw(grid, 10, 1, 4);
-  draw(grid, 14, 2, 4);
-  draw(grid, 14, 1, 4);
+  draw(grid, 10, 0, 4);
+  draw(grid, 15, 1, 4);
+  draw(grid, 15, 0, 4);
 
-  draw(grid, 10, 4, 5);
-  draw(grid, 14, 4, 5);
+  /* eyes */
+  draw(grid, 11, 4, 5);
+  draw(grid, 15, 4, 5);
 
-  rect(grid, 3, 7, 7, 13, 2);
-  rect(grid, 16, 7, 20, 13, 2);
+  /* wings */
+  rect(grid, 3, 7, 7, 14, 2);
+  rect(grid, 17, 7, 21, 14, 2);
 
-  draw(grid, 3, 7, 0);
-  draw(grid, 20, 7, 0);
+  draw(grid, 2, 8, 2);
+  draw(grid, 1, 9, 2);
+  draw(grid, 2, 13, 2);
 
-  draw(grid, 4, 8, 4);
-  draw(grid, 5, 10, 4);
-  draw(grid, 6, 12, 4);
+  draw(grid, 22, 8, 2);
+  draw(grid, 23, 9, 2);
+  draw(grid, 22, 13, 2);
 
-  draw(grid, 19, 8, 4);
-  draw(grid, 18, 10, 4);
-  draw(grid, 17, 12, 4);
-
+  /* legs */
   rect(grid, 8, 16, 10, 21, 4);
   rect(grid, 14, 16, 16, 21, 4);
 
-  const tailLength = 3 + Math.floor(random() * 4);
+  /* tail */
+  let tx = 17;
+  let ty = 14;
 
-  for (let i = 0; i < tailLength; i++) {
-    draw(grid, 17 + i, 14 + i, 3);
-    draw(grid, 18 + i, 14 + i, 3);
+  const length = 3 + Math.floor(random() * 3);
+
+  for (let i = 0; i < length; i++) {
+    draw(grid, tx + i, ty + i, 3);
+    draw(grid, tx + i + 1, ty + i, 3);
   }
 
+  /* belly */
   rect(grid, 10, 10, 13, 15, 2);
 }
 
-function drawQuadruped(grid: number[], random: () => number) {
+function drawQuadruped(
+  grid: number[],
+  random: () => number
+) {
+  /* torso */
   rect(grid, 4, 9, 16, 16, 3);
   rect(grid, 5, 7, 15, 17, 3);
 
+  /* head */
   rect(grid, 13, 4, 19, 10, 3);
-  rect(grid, 18, 7, 21, 10, 3);
+  rect(grid, 17, 7, 21, 10, 3);
 
-  const ears = Math.floor(random() * 3);
+  /* ears */
+  const earStyle = Math.floor(random() * 3);
 
-  if (ears === 0) {
+  if (earStyle === 0) {
     rect(grid, 14, 2, 16, 5, 4);
     rect(grid, 17, 2, 19, 5, 4);
-  } else if (ears === 1) {
+  } else if (earStyle === 1) {
     draw(grid, 14, 3, 4);
     draw(grid, 15, 2, 4);
     draw(grid, 18, 3, 4);
     draw(grid, 19, 2, 4);
   } else {
-    draw(grid, 15, 2, 4);
-    draw(grid, 18, 2, 4);
+    draw(grid, 15, 1, 4);
+    draw(grid, 18, 1, 4);
   }
 
+  /* eyes */
   draw(grid, 15, 6, 5);
   draw(grid, 18, 6, 5);
 
+  /* legs */
   rect(grid, 5, 16, 7, 22, 4);
   rect(grid, 9, 16, 11, 22, 4);
   rect(grid, 14, 16, 16, 22, 4);
   rect(grid, 17, 16, 19, 22, 4);
 
+  /* tail variations */
   const tail = Math.floor(random() * 3);
 
   if (tail === 0) {
@@ -341,112 +728,158 @@ function drawQuadruped(grid: number[], random: () => number) {
     draw(grid, 1, 10, 3);
   } else {
     rect(grid, 2, 13, 5, 15, 3);
+    draw(grid, 1, 14, 4);
   }
 
+  /* chest */
   rect(grid, 13, 10, 15, 14, 2);
 
-  // Extra individual markings
-  for (let i = 0; i < 5; i++) {
+  /* markings */
+  const marks = 2 + Math.floor(random() * 5);
+
+  for (let i = 0; i < marks; i++) {
     draw(
       grid,
-      9 + Math.floor(random() * 6),
+      8 + Math.floor(random() * 5),
       10 + Math.floor(random() * 5),
       2
     );
   }
 }
 
-function drawSerpent(grid: number[], random: () => number) {
+function drawSerpent(
+  grid: number[],
+  random: () => number
+) {
   const points = [
-    [17, 4],
-    [16, 6],
-    [14, 8],
-    [12, 10],
-    [10, 12],
-    [8, 14],
-    [6, 16],
-    [5, 18],
+    [18, 4],
+    [17, 6],
+    [15, 8],
+    [13, 10],
+    [11, 12],
+    [9, 14],
+    [7, 16],
+    [6, 18],
   ];
 
   for (const [x, y] of points) {
-    rect(grid, x - 1, y - 1, x + 1, y + 1, 3);
+    rect(
+      grid,
+      x - 2,
+      y - 2,
+      x + 2,
+      y + 2,
+      3
+    );
   }
 
-  rect(grid, 15, 2, 20, 6, 3);
+  /* head */
+  rect(grid, 15, 2, 20, 7, 3);
 
+  /* eyes */
   draw(grid, 16, 3, 5);
   draw(grid, 19, 3, 5);
 
-  draw(grid, 21, 5, 4);
-  draw(grid, 22, 5, 4);
+  /* horns */
+  draw(grid, 16, 1, 4);
+  draw(grid, 19, 1, 4);
 
-  for (let i = 0; i < 4; i++) {
-    const x = 8 + i * 2;
-    const y = 14 - i * 2;
-    draw(grid, x, y, random() > 0.5 ? 2 : 4);
-  }
-
-  draw(grid, 4, 19, 4);
-  draw(grid, 3, 20, 4);
-  draw(grid, 2, 20, 4);
-}
-
-function drawAquatic(grid: number[], random: () => number) {
-  rect(grid, 5, 8, 18, 15, 3);
-  rect(grid, 7, 6, 16, 17, 3);
-
-  rect(grid, 15, 7, 20, 14, 3);
-
-  draw(grid, 18, 9, 5);
-  draw(grid, 20, 12, 4);
-
-  draw(grid, 3, 9, 4);
-  draw(grid, 2, 8, 4);
-  draw(grid, 2, 10, 4);
-  draw(grid, 1, 7, 4);
-  draw(grid, 1, 11, 4);
-
-  rect(grid, 9, 5, 13, 7, 2);
-  rect(grid, 10, 15, 14, 18, 2);
-
-  for (let i = 0; i < 5; i++) {
-    const x = 6 + Math.floor(random() * 10);
-    const y = 10 + Math.floor(random() * 5);
+  /* scales */
+  for (let i = 0; i < 7; i++) {
+    const x = 7 + Math.floor(random() * 9);
+    const y = 10 + Math.floor(random() * 7);
 
     draw(grid, x, y, 2);
   }
+
+  /* tail */
+  draw(grid, 5, 19, 4);
+  draw(grid, 4, 20, 4);
+  draw(grid, 3, 20, 4);
 }
 
-function drawAvian(grid: number[], random: () => number) {
+function drawAquatic(
+  grid: number[],
+  random: () => number
+) {
+  /* body */
+  rect(grid, 5, 8, 18, 15, 3);
+  rect(grid, 7, 6, 16, 17, 3);
+
+  /* head */
+  rect(grid, 15, 7, 20, 14, 3);
+
+  /* eyes */
+  draw(grid, 18, 9, 5);
+  draw(grid, 20, 12, 4);
+
+  /* fins */
+  draw(grid, 4, 8, 4);
+  draw(grid, 3, 7, 4);
+  draw(grid, 2, 8, 4);
+
+  draw(grid, 4, 14, 4);
+  draw(grid, 3, 15, 4);
+
+  /* top fin */
+  rect(grid, 9, 4, 13, 7, 2);
+
+  /* bottom fin */
+  rect(grid, 10, 15, 14, 19, 2);
+
+  /* scales */
+  for (let i = 0; i < 7; i++) {
+    draw(
+      grid,
+      7 + Math.floor(random() * 9),
+      9 + Math.floor(random() * 5),
+      2
+    );
+  }
+}
+
+function drawAvian(
+  grid: number[],
+  random: () => number
+) {
+  /* body */
   rect(grid, 8, 8, 15, 17, 3);
   rect(grid, 9, 6, 14, 18, 3);
 
+  /* head */
   rect(grid, 10, 3, 15, 8, 3);
 
+  /* beak */
   draw(grid, 16, 5, 4);
   draw(grid, 17, 6, 4);
 
+  /* eyes */
   draw(grid, 11, 5, 5);
   draw(grid, 14, 5, 5);
 
+  /* left wing */
   rect(grid, 3, 8, 8, 15, 2);
   draw(grid, 2, 9, 2);
   draw(grid, 1, 10, 2);
   draw(grid, 2, 13, 4);
 
+  /* right wing */
   rect(grid, 15, 8, 20, 15, 2);
   draw(grid, 21, 9, 2);
   draw(grid, 22, 10, 2);
   draw(grid, 21, 13, 4);
 
+  /* tail */
   draw(grid, 8, 15, 4);
   draw(grid, 7, 17, 4);
   draw(grid, 6, 19, 4);
 
+  /* legs */
   rect(grid, 9, 17, 10, 21, 4);
   rect(grid, 13, 17, 14, 21, 4);
 
-  for (let i = 0; i < 4; i++) {
+  /* feathers */
+  for (let i = 0; i < 5; i++) {
     draw(
       grid,
       9 + Math.floor(random() * 6),
@@ -456,61 +889,72 @@ function drawAvian(grid: number[], random: () => number) {
   }
 }
 
-function drawInsect(grid: number[], random: () => number) {
+function drawInsect(
+  grid: number[],
+  random: () => number
+) {
+  /* head */
   rect(grid, 9, 4, 14, 8, 3);
 
+  /* eyes */
   draw(grid, 10, 5, 5);
   draw(grid, 13, 5, 5);
 
-  rect(grid, 8, 7, 15, 12, 3);
-
-  rect(grid, 8, 11, 15, 18, 4);
+  /* body */
+  rect(grid, 8, 7, 15, 18, 3);
   rect(grid, 9, 18, 14, 20, 4);
 
+  /* antenna */
   draw(grid, 9, 3, 4);
   draw(grid, 8, 2, 4);
+
   draw(grid, 14, 3, 4);
   draw(grid, 15, 2, 4);
 
+  /* wings */
   rect(grid, 3, 7, 8, 14, 2);
   rect(grid, 15, 7, 20, 14, 2);
 
   draw(grid, 2, 8, 2);
   draw(grid, 1, 9, 2);
-  draw(grid, 2, 13, 4);
 
   draw(grid, 21, 8, 2);
   draw(grid, 22, 9, 2);
-  draw(grid, 21, 13, 4);
 
+  /* legs */
   for (let y = 9; y <= 15; y += 2) {
     draw(grid, 6, y, 4);
     draw(grid, 5, y + 1, 4);
+
     draw(grid, 17, y, 4);
     draw(grid, 18, y + 1, 4);
   }
 
-  for (let y = 13; y <= 18; y += 2) {
-    draw(grid, 8, y, 5);
-    draw(grid, 15, y, 5);
-  }
-
+  /* body markings */
   for (let i = 0; i < 5; i++) {
     draw(
       grid,
-      3 + Math.floor(random() * 5),
-      8 + Math.floor(random() * 5),
-      1
+      10 + Math.floor(random() * 4),
+      9 + Math.floor(random() * 7),
+      2
     );
   }
 }
 
-function drawSpider(grid: number[], random: () => number) {
+function drawSpider(
+  grid: number[],
+  random: () => number
+) {
+  /* body */
   rect(grid, 8, 8, 15, 16, 3);
+
+  /* head */
   rect(grid, 9, 6, 14, 10, 4);
 
+  /* eyes */
   draw(grid, 10, 8, 5);
   draw(grid, 13, 8, 5);
+
   draw(grid, 11, 7, 5);
   draw(grid, 12, 7, 5);
 
@@ -526,13 +970,36 @@ function drawSpider(grid: number[], random: () => number) {
   ];
 
   for (const [dx, dy] of legs) {
-    draw(grid, 8 + dx * 2, 10 + dy * 2, 4);
-    draw(grid, 8 + dx * 3, 11 + dy * 2, 4);
+    draw(
+      grid,
+      8 + dx * 2,
+      10 + dy * 2,
+      4
+    );
 
-    draw(grid, 15 + dx * 2, 10 + dy * 2, 4);
-    draw(grid, 15 + dx * 3, 11 + dy * 2, 4);
+    draw(
+      grid,
+      8 + dx * 3,
+      11 + dy * 2,
+      4
+    );
+
+    draw(
+      grid,
+      15 + dx * 2,
+      10 + dy * 2,
+      4
+    );
+
+    draw(
+      grid,
+      15 + dx * 3,
+      11 + dy * 2,
+      4
+    );
   }
 
+  /* markings */
   for (let i = 0; i < 5; i++) {
     draw(
       grid,
@@ -543,17 +1010,20 @@ function drawSpider(grid: number[], random: () => number) {
   }
 }
 
-function drawBlob(grid: number[], random: () => number) {
-  const wobble = Math.floor(random() * 3);
+function drawBlob(
+  grid: number[],
+  random: () => number
+) {
+  const wobble = random();
 
-  for (let y = 5; y <= 18; y++) {
+  for (let y = 5; y <= 19; y++) {
     for (let x = 4; x <= 19; x++) {
-      const dx = x - 11;
+      const dx = x - 11.5;
       const dy = y - 12;
 
       const distance =
-        (dx * dx) / 55 +
-        (dy * dy) / (60 + wobble * 10);
+        (dx * dx) / (58 + wobble * 15) +
+        (dy * dy) / (70 + wobble * 15);
 
       if (distance < 1) {
         draw(grid, x, y, 3);
@@ -561,51 +1031,71 @@ function drawBlob(grid: number[], random: () => number) {
     }
   }
 
+  /* eyes */
   draw(grid, 8, 10, 5);
   draw(grid, 14, 10, 5);
 
+  /* highlights */
   draw(grid, 7, 7, 1);
   draw(grid, 8, 7, 1);
   draw(grid, 7, 8, 1);
 
+  /* feet */
   draw(grid, 6, 18, 4);
   draw(grid, 6, 19, 4);
+
   draw(grid, 11, 18, 4);
+
   draw(grid, 15, 18, 4);
   draw(grid, 15, 19, 4);
 
-  for (let i = 0; i < 5; i++) {
+  /* spots */
+  for (let i = 0; i < 6; i++) {
     draw(
       grid,
-      7 + Math.floor(random() * 8),
+      7 + Math.floor(random() * 9),
       12 + Math.floor(random() * 5),
       2
     );
   }
 }
 
-function drawBiped(grid: number[], random: () => number) {
+function drawBiped(
+  grid: number[],
+  random: () => number
+) {
+  /* body */
   rect(grid, 8, 9, 15, 17, 3);
 
+  /* head */
   rect(grid, 8, 3, 15, 9, 3);
 
+  /* eyes */
   draw(grid, 10, 6, 5);
   draw(grid, 13, 6, 5);
 
+  /* horns / ears */
   if (random() > 0.5) {
     draw(grid, 8, 3, 4);
     draw(grid, 7, 2, 4);
+
     draw(grid, 15, 3, 4);
     draw(grid, 16, 2, 4);
+  } else {
+    draw(grid, 9, 2, 4);
+    draw(grid, 14, 2, 4);
   }
 
+  /* arms */
   rect(grid, 5, 10, 8, 14, 4);
   rect(grid, 15, 10, 18, 14, 4);
 
+  /* legs */
   rect(grid, 9, 17, 11, 22, 4);
   rect(grid, 13, 17, 15, 22, 4);
 
-  for (let i = 0; i < 5; i++) {
+  /* body markings */
+  for (let i = 0; i < 6; i++) {
     draw(
       grid,
       9 + Math.floor(random() * 6),
@@ -616,7 +1106,85 @@ function drawBiped(grid: number[], random: () => number) {
 }
 
 /* =========================================================
-   MAIN GENERATOR
+   SPECIAL RARITY DETAILS
+   ========================================================= */
+
+function addRarityDetails(
+  grid: number[],
+  tier: Tier,
+  random: () => number
+) {
+  /*
+   * Rarity adds details instead of replacing the species.
+   */
+
+  if (tier === "Worthless") {
+    return;
+  }
+
+  if (
+    tier === "Average" ||
+    tier === "Decent"
+  ) {
+    /* small marking */
+    draw(
+      grid,
+      11 + Math.floor(random() * 3),
+      13 + Math.floor(random() * 3),
+      2
+    );
+
+    return;
+  }
+
+  if (tier === "Good") {
+    /* extra horns / jewel */
+    draw(grid, 11, 2, 4);
+    draw(grid, 12, 2, 4);
+
+    return;
+  }
+
+  if (tier === "Fabulous") {
+    /* crystals */
+    draw(grid, 9, 1, 4);
+    draw(grid, 10, 1, 4);
+    draw(grid, 15, 1, 4);
+    draw(grid, 16, 1, 4);
+
+    draw(grid, 11, 19, 2);
+    draw(grid, 12, 19, 2);
+
+    return;
+  }
+
+  if (tier === "Excellent") {
+    /* large crown-like crystal structure */
+    draw(grid, 9, 1, 4);
+    draw(grid, 10, 0, 4);
+    draw(grid, 11, 1, 4);
+
+    draw(grid, 14, 1, 4);
+    draw(grid, 15, 0, 4);
+    draw(grid, 16, 1, 4);
+
+    /* magical markings */
+    draw(grid, 8, 12, 2);
+    draw(grid, 17, 12, 2);
+    draw(grid, 10, 15, 2);
+    draw(grid, 15, 15, 2);
+
+    /* sparkle */
+    if (random() > 0.5) {
+      draw(grid, 4, 5, 2);
+      draw(grid, 20, 5, 2);
+      draw(grid, 5, 18, 2);
+    }
+  }
+}
+
+/* =========================================================
+   CREATURE GENERATOR
    ========================================================= */
 
 function generateCreature(
@@ -629,7 +1197,14 @@ function generateCreature(
 
   const random = rng(combinedSeed);
 
-  const body = getBodyType(species, random);
+  const body =
+    SPECIES_BODY[species] ??
+    BODY_TYPES[
+      Math.floor(
+        random() * BODY_TYPES.length
+      )
+    ];
+
   const grid = createGrid();
 
   switch (body) {
@@ -670,27 +1245,17 @@ function generateCreature(
       break;
   }
 
-  const tierColors = TIER_BASE_COLORS[tier];
+  addRarityDetails(
+    grid,
+    tier,
+    random
+  );
 
-  const accent =
-    SECONDARY_COLORS[
-      Math.floor(random() * SECONDARY_COLORS.length)
-    ];
-
-  /*
-   * IMPORTANT:
-   * Return BOTH the sprite grid AND palette.
-   * The old code only returned the palette,
-   * which caused PetAvatar to have no actual sprite pattern.
-   */
-  const palette = [
-    "transparent",
-    tierColors[1],
-    accent,
-    tierColors[3],
-    tierColors[4],
-    "#111827",
-  ];
+  const palette = getPalette(
+    species,
+    tier,
+    random
+  );
 
   return {
     grid,
@@ -727,11 +1292,16 @@ export function PetAvatar({
   );
 
   /*
-   * Keep the sprite comfortably inside the box.
+   * Larger than the previous version.
+   *
+   * 0.86 means the 24x24 sprite occupies around 86%
+   * of the avatar instead of being tiny in the middle.
    */
   const px = Math.max(
     1,
-    Math.floor((size * 0.72) / GRID)
+    Math.floor(
+      (size * 0.86) / GRID
+    )
   );
 
   const spriteSize = px * GRID;
@@ -745,31 +1315,40 @@ export function PetAvatar({
         imageRendering: "pixelated",
       }}
     >
-      {/* Glow */}
+      {/* subtle glow */}
       <div
-        className="absolute rounded-full blur-xl opacity-20"
+        className="absolute rounded-full blur-xl opacity-20 pointer-events-none"
         style={{
-          width: size * 0.65,
-          height: size * 0.65,
-          left: size * 0.175,
-          top: size * 0.175,
-          background: sprite.palette[2],
+          width: size * 0.7,
+          height: size * 0.7,
+          left: size * 0.15,
+          top: size * 0.15,
+          background: sprite.palette.accent,
         }}
       />
 
-      {/* ACTUAL SPRITE */}
+      {/* sprite */}
       <div
         className="absolute"
         style={{
           width: spriteSize,
           height: spriteSize,
-          left: (size - spriteSize) / 2,
-          top: (size - spriteSize) / 2,
+          left:
+            (size - spriteSize) / 2,
+          top:
+            (size - spriteSize) / 2,
         }}
       >
         {pixelGrid(
           sprite.grid,
-          sprite.palette,
+          [
+            "transparent",
+            sprite.palette.light,
+            sprite.palette.accent,
+            sprite.palette.main,
+            sprite.palette.dark,
+            "#111827",
+          ],
           px
         )}
       </div>
@@ -781,7 +1360,10 @@ export function PetAvatar({
    EGGS
    ========================================================= */
 
-const EGG_PALETTES: Record<string, string[]> = {
+const EGG_PALETTES: Record<
+  string,
+  string[]
+> = {
   worthless: [
     "#fff7ed",
     "#ffedd5",
@@ -883,8 +1465,9 @@ export function EggVisual({
   size?: number;
 }) {
   const palette =
-    EGG_PALETTES[type.toLowerCase()] ??
-    EGG_PALETTES.worthless;
+    EGG_PALETTES[
+      type.toLowerCase()
+    ] ?? EGG_PALETTES.worthless;
 
   const px = Math.floor(size / 16);
 
@@ -913,8 +1496,17 @@ export function EggVisual({
           height: px * 16,
         }}
       >
-        {pixelGridEgg(EGG_SPRITE, palette, px)}
-        {pixelGridEgg(EGG_HIGHLIGHT, palette, px)}
+        {pixelGridEgg(
+          EGG_SPRITE,
+          palette,
+          px
+        )}
+
+        {pixelGridEgg(
+          EGG_HIGHLIGHT,
+          palette,
+          px
+        )}
       </div>
     </div>
   );
@@ -940,7 +1532,8 @@ function pixelGridEgg(
           top: y * px,
           width: px,
           height: px,
-          background: palette[value] ?? palette[1],
+          background:
+            palette[value] ?? palette[1],
         }}
       />
     );
@@ -948,7 +1541,7 @@ function pixelGridEgg(
 }
 
 /* =========================================================
-   OTHER UI
+   SPINNER
    ========================================================= */
 
 export function Spinner({
@@ -966,6 +1559,10 @@ export function Spinner({
     />
   );
 }
+
+/* =========================================================
+   EMPTY STATE
+   ========================================================= */
 
 export function EmptyState({
   icon,
@@ -993,6 +1590,10 @@ export function EmptyState({
   );
 }
 
+/* =========================================================
+   MODAL
+   ========================================================= */
+
 export function Modal({
   open,
   onClose,
@@ -1013,7 +1614,9 @@ export function Modal({
     >
       <div
         className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) =>
+          e.stopPropagation()
+        }
       >
         {title && (
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
@@ -1038,6 +1641,10 @@ export function Modal({
   );
 }
 
+/* =========================================================
+   HP BAR
+   ========================================================= */
+
 export function HpBar({
   current,
   max,
@@ -1047,7 +1654,10 @@ export function HpBar({
 }) {
   const pct = Math.max(
     0,
-    Math.min(100, (current / max) * 100)
+    Math.min(
+      100,
+      (current / max) * 100
+    )
   );
 
   const color =
