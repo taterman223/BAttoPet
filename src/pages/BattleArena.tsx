@@ -1,689 +1,385 @@
-import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
-
-type Battle = {
-  id: string;
-  creator_id: string;
-  creator_pet_id: string;
-  creator_current_hp: number;
-  joiner_id: string | null;
-  joiner_pet_id: string | null;
-  joiner_current_hp: number | null;
-  current_turn_player_id: string | null;
-  round_number: number;
-  status: string;
-  winner_id: string | null;
-  winner_name: string | null;
-};
-
-type Pet = {
-  id: string;
-  name: string;
-  species?: string | null;
-  tier: string;
-  attack: number;
-  defense: number;
-  max_health: number;
-  crit_chance: number;
-  multi_attack_chance: number;
-  passive_effect?: {
-    type?: string;
-    value?: number;
-  } | null;
-};
-
-type CombatLog = {
-  id: string;
-  message: string;
-  round_number: number;
-};
+import { useEffect, useState, useRef } from "react";
+import { supabase, type Battle, type Pet, type CombatLog, TIER_COLORS, TIER_ORDER, type Tier } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
+import { PetAvatar, TierBadge, EmptyState, Spinner, HpBar, Modal } from "@/lib/ui";
+import { Swords, Plus, LogIn, X, Zap, Trophy, RefreshCw, Clock } from "lucide-react";
 
 export default function BattleArena() {
-  const [userId, setUserId] = useState<string | null>(null);
-  const [pet, setPet] = useState<Pet | null>(null);
-  const [battle, setBattle] = useState<Battle | null>(null);
-  const [logs, setLogs] = useState<CombatLog[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [battleIdInput, setBattleIdInput] = useState("");
+  const { user, session } = useAuth();
+  const [battles, setBattles] = useState<Battle[]>([]);
+  const [logs, setLogs] = useState<Record<string, CombatLog[]>>({});
+  const [loading, setLoading] = useState(true);
+  const [myPets, setMyPets] = useState<Pet[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [joinBattle, setJoinBattle] = useState<Battle | null>(null);
+  const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeBattle, setActiveBattle] = useState<Battle | null>(null);
+  const [activeLogs, setActiveLogs] = useState<CombatLog[]>([]);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  async function loadUser() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setMessage("You must be signed in.");
-      return;
-    }
-
-    setUserId(user.id);
-  }
-
-  async function loadPet(petId: string) {
-    const { data, error } = await supabase
-      .from("pets")
-      .select(`
-        id,
-        name,
-        species,
-        tier,
-        attack,
-        defense,
-        max_health,
-        crit_chance,
-        multi_attack_chance,
-        passive_effect
-      `)
-      .eq("id", petId)
-      .maybeSingle();
-
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-
-    setPet(data as Pet);
-  }
-
-  async function callBattle(
-    action: string,
-    extra: Record<string, unknown> = {},
-  ) {
-    setLoading(true);
-    setMessage("");
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
-        setMessage("You must be signed in.");
-        return null;
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/battle`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            action,
-            ...extra,
-          }),
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error ||
-            data?.details ||
-            "Battle request failed.",
-        );
-      }
-
-      return data;
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Battle request failed.",
-      );
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function createBattle() {
-    if (!pet) {
-      setMessage("Select a pet first.");
-      return;
-    }
-
-    const result = await callBattle("create", {
-      pet_id: pet.id,
-    });
-
-    if (!result) return;
-
-    setMessage(`Battle created! ID: ${result.battle_id}`);
-
-    await loadBattle(result.battle_id);
-  }
-
-  async function joinBattle() {
-    if (!pet) {
-      setMessage("Select a pet first.");
-      return;
-    }
-
-    if (!battleIdInput.trim()) {
-      setMessage("Enter a battle ID.");
-      return;
-    }
-
-    const result = await callBattle("join", {
-      battle_id: battleIdInput.trim(),
-      pet_id: pet.id,
-    });
-
-    if (!result) return;
-
-    setMessage("Battle joined!");
-
-    await loadBattle(battleIdInput.trim());
-  }
-
-  async function attack() {
-    if (!battle) return;
-
-    const result = await callBattle("attack", {
-      battle_id: battle.id,
-    });
-
-    if (!result) return;
-
-    await loadBattle(battle.id);
-
-    if (result.finished) {
-      setMessage("Battle finished!");
-    }
-  }
-
-  async function cancelBattle() {
-    if (!battle) return;
-
-    const result = await callBattle("cancel", {
-      battle_id: battle.id,
-    });
-
-    if (!result) return;
-
-    setBattle(null);
-    setLogs([]);
-    setMessage("Battle cancelled.");
-  }
-
-  async function loadBattle(id: string) {
-    const { data, error } = await supabase
+  async function loadBattles() {
+    const { data } = await supabase
       .from("battles")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-
-    if (!data) {
-      setMessage("Battle not found.");
-      return;
-    }
-
-    setBattle(data as Battle);
-
-    await loadBattleLogs(id);
-
-    if (data.creator_pet_id) {
-      await loadPet(data.creator_pet_id);
-    }
-  }
-
-  async function loadBattleLogs(id: string) {
-    const { data, error } = await supabase
-      .from("battle_combat_logs")
-      .select("id, message, round_number")
-      .eq("battle_id", id)
-      .order("id", {
-        ascending: true,
-      });
-
-    if (!error && data) {
-      setLogs(data as CombatLog[]);
-    }
-  }
-
-  const isMyTurn =
-    !!battle &&
-    !!userId &&
-    battle.current_turn_player_id === userId;
-
-  const battleFinished =
-    battle?.status === "finished";
-
-  const iAmCreator =
-    !!battle &&
-    !!userId &&
-    battle.creator_id === userId;
-
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        padding: "30px",
-        background: "#111",
-        color: "white",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "1000px",
-          margin: "0 auto",
-        }}
-      >
-        <h1>⚔️ Battle Arena</h1>
-
-        {message && (
-          <div
-            style={{
-              padding: "12px",
-              marginBottom: "20px",
-              background: "#222",
-              borderRadius: "8px",
-            }}
-          >
-            {message}
-          </div>
-        )}
-
-        {!pet && (
-          <PetSelector
-            userId={userId}
-            onSelect={(selectedPet) => {
-              setPet(selectedPet);
-              setMessage(
-                `Selected ${selectedPet.name}`,
-              );
-            }}
-          />
-        )}
-
-        {pet && !battle && (
-          <div
-            style={{
-              padding: "20px",
-              background: "#1c1c1c",
-              borderRadius: "12px",
-              marginBottom: "20px",
-            }}
-          >
-            <h2>
-              Selected Pet: {pet.name}
-            </h2>
-
-            <p>
-              Tier: {pet.tier}
-            </p>
-
-            <p>
-              ⚔️ Attack: {pet.attack}
-            </p>
-
-            <p>
-              🛡️ Defense: {pet.defense}
-            </p>
-
-            <p>
-              ❤️ Health: {pet.max_health}
-            </p>
-
-            <button
-              onClick={createBattle}
-              disabled={loading}
-              style={buttonStyle}
-            >
-              {loading
-                ? "Creating..."
-                : "Create Battle"}
-            </button>
-
-            <div
-              style={{
-                marginTop: "25px",
-              }}
-            >
-              <input
-                value={battleIdInput}
-                onChange={(e) =>
-                  setBattleIdInput(
-                    e.target.value,
-                  )
-                }
-                placeholder="Enter Battle ID"
-                style={inputStyle}
-              />
-
-              <button
-                onClick={joinBattle}
-                disabled={loading}
-                style={buttonStyle}
-              >
-                {loading
-                  ? "Joining..."
-                  : "Join Battle"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {battle && (
-          <>
-            <div
-              style={{
-                padding: "20px",
-                background: "#1c1c1c",
-                borderRadius: "12px",
-                marginBottom: "20px",
-              }}
-            >
-              <h2>
-                Battle: {battle.id}
-              </h2>
-
-              <p>
-                Status: {battle.status}
-              </p>
-
-              <p>
-                Round: {battle.round_number}
-              </p>
-
-              {battle.status ===
-                "waiting" && (
-                <>
-                  <p>
-                    Waiting for another
-                    player...
-                  </p>
-
-                  {iAmCreator && (
-                    <button
-                      onClick={
-                        cancelBattle
-                      }
-                      disabled={loading}
-                      style={buttonStyle}
-                    >
-                      Cancel Battle
-                    </button>
-                  )}
-                </>
-              )}
-
-              {battle.status ===
-                "active" && (
-                <>
-                  <h3>
-                    {isMyTurn
-                      ? "🔥 YOUR TURN"
-                      : "⏳ Waiting for opponent..."}
-                  </h3>
-
-                  <button
-                    onClick={attack}
-                    disabled={
-                      loading ||
-                      !isMyTurn
-                    }
-                    style={{
-                      ...buttonStyle,
-                      opacity:
-                        isMyTurn
-                          ? 1
-                          : 0.5,
-                    }}
-                  >
-                    {loading
-                      ? "Attacking..."
-                      : "⚔️ ATTACK"}
-                  </button>
-                </>
-              )}
-
-              {battleFinished && (
-                <div
-                  style={{
-                    marginTop: "20px",
-                    padding: "15px",
-                    background: "#252525",
-                    borderRadius: "8px",
-                  }}
-                >
-                  <h2>
-                    🏆 Battle Finished
-                  </h2>
-
-                  <p>
-                    Winner:{" "}
-                    {battle.winner_name ??
-                      "Unknown"}
-                  </p>
-
-                  {battle.winner_id ===
-                    userId ? (
-                    <p>
-                      You won! Your clone
-                      reward has been created.
-                    </p>
-                  ) : (
-                    <p>
-                      You lost. Your pet is
-                      battle-locked for 24 hours.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div
-              style={{
-                padding: "20px",
-                background: "#1c1c1c",
-                borderRadius: "12px",
-              }}
-            >
-              <h2>📜 Combat Log</h2>
-
-              {logs.length === 0 ? (
-                <p>
-                  No combat actions yet.
-                </p>
-              ) : (
-                logs.map((log) => (
-                  <div
-                    key={log.id}
-                    style={{
-                      padding: "8px 0",
-                      borderBottom:
-                        "1px solid #333",
-                    }}
-                  >
-                    <span
-                      style={{
-                        opacity: 0.6,
-                      }}
-                    >
-                      Round{" "}
-                      {log.round_number}:{" "}
-                    </span>
-
-                    {log.message}
-                  </div>
-                ))
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PetSelector({
-  userId,
-  onSelect,
-}: {
-  userId: string | null;
-  onSelect: (pet: Pet) => void;
-}) {
-  const [pets, setPets] = useState<Pet[]>(
-    [],
-  );
-  const [loading, setLoading] =
-    useState(true);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    loadPets();
-  }, [userId]);
-
-  async function loadPets() {
-    setLoading(true);
-
-    const { data, error } =
-      await supabase
-        .from("pets")
-        .select(`
-          id,
-          name,
-          species,
-          tier,
-          attack,
-          defense,
-          max_health,
-          crit_chance,
-          multi_attack_chance,
-          passive_effect
-        `)
-        .eq("owner_id", userId)
-        .eq("in_battle", false)
-        .order("name");
-
-    if (!error && data) {
-      setPets(data as Pet[]);
-    }
-
+      .select("*, creator_pet:pets!battles_creator_pet_id_fkey(*), joiner_pet:pets!battles_joiner_pet_id_fkey(*), creator:players!battles_creator_id_fkey(username), joiner:players!battles_joiner_id_fkey(username)")
+      .in("status", ["waiting", "active"])
+      .order("created_at", { ascending: false });
+    setBattles((data ?? []) as unknown as Battle[]);
     setLoading(false);
   }
 
-  if (!userId) {
-    return (
-      <p>
-        Please sign in to battle.
-      </p>
-    );
+  async function loadMyPets() {
+    if (!user) return;
+    const { data } = await supabase.from("pets").select("*").eq("owner_id", user.id).order("created_at", { ascending: false });
+    setMyPets((data ?? []) as Pet[]);
   }
 
-  if (loading) {
-    return <p>Loading pets...</p>;
+  useEffect(() => {
+    loadBattles();
+    loadMyPets();
+    const channel = supabase.channel("battles")
+      .on("postgres_changes", { event: "*", schema: "public", table: "battles" }, loadBattles)
+      .on("postgres_changes", { event: "*", schema: "public", table: "pets" }, loadMyPets)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
+  // Active battle view with realtime logs
+  useEffect(() => {
+    if (!activeBattle) return;
+    const battleId = activeBattle.id;
+
+    async function loadActive() {
+      const { data: b } = await supabase
+        .from("battles")
+        .select("*, creator_pet:pets!battles_creator_pet_id_fkey(*), joiner_pet:pets!battles_joiner_pet_id_fkey(*), creator:players!battles_creator_id_fkey(username), joiner:players!battles_joiner_id_fkey(username)")
+        .eq("id", battleId)
+        .maybeSingle();
+      if (b) setActiveBattle(b as unknown as Battle);
+
+      const { data: l } = await supabase.from("battle_combat_logs").select("*").eq("battle_id", battleId).order("created_at", { ascending: true });
+      setActiveLogs((l ?? []) as CombatLog[]);
+    }
+
+    loadActive();
+    const ch = supabase.channel(`battle-${battleId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "battles", filter: `id=eq.${battleId}` }, loadActive)
+      .on("postgres_changes", { event: "*", schema: "public", table: "battle_combat_logs", filter: `battle_id=eq.${battleId}` }, loadActive)
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [activeBattle?.id]);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeLogs]);
+
+  const eligiblePets = myPets.filter((p) =>
+    !p.in_battle &&
+    !(p.battle_locked_until && new Date(p.battle_locked_until) > new Date())
+  );
+
+  async function callBattle(action: string, extra: Record<string, unknown> = {}) {
+    if (!session) return null;
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/battle`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action, ...extra }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error); return null; }
+    return data;
   }
 
-  if (pets.length === 0) {
-    return (
-      <div
-        style={{
-          padding: "20px",
-          background: "#1c1c1c",
-          borderRadius: "12px",
-        }}
-      >
-        <h2>No available pets</h2>
-        <p>
-          You don't currently have a pet
-          available for battle.
-        </p>
-      </div>
-    );
+  async function handleCreate() {
+    if (!selectedPet) return;
+    setBusy(true); setError(null);
+    const data = await callBattle("create", { pet_id: selectedPet.id });
+    setBusy(false);
+    if (data?.battle_id) {
+      setCreateOpen(false);
+      setSelectedPet(null);
+      loadBattles();
+    }
   }
+
+  async function handleJoin() {
+    if (!joinBattle || !selectedPet) return;
+    setBusy(true); setError(null);
+    const data = await callBattle("join", { battle_id: joinBattle.id, pet_id: selectedPet.id });
+    setBusy(false);
+    if (data?.ok) {
+      setJoinBattle(null);
+      setSelectedPet(null);
+      loadBattles();
+    }
+  }
+
+  async function handleCancel(battleId: string) {
+    await callBattle("cancel", { battle_id: battleId });
+    loadBattles();
+  }
+
+  async function handleAttack() {
+    if (!activeBattle) return;
+    setBusy(true); setError(null);
+    await callBattle("attack", { battle_id: activeBattle.id });
+    setBusy(false);
+  }
+
+  if (activeBattle) {
+    return <ActiveBattleView battle={activeBattle} logs={activeLogs} userId={user!.id} onAttack={handleAttack} onLeave={() => setActiveBattle(null)} busy={busy} error={error} logEndRef={logEndRef} />;
+  }
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
+
+  const waitingBattles = battles.filter((b) => b.status === "waiting" && b.creator_id !== user?.id);
+  const myActiveBattles = battles.filter((b) => (b.creator_id === user?.id || b.joiner_id === user?.id) && b.status === "active");
+  const myWaitingBattles = battles.filter((b) => b.creator_id === user?.id && b.status === "waiting");
 
   return (
-    <div
-      style={{
-        marginBottom: "20px",
-      }}
-    >
-      <h2>Select your pet</h2>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            "repeat(auto-fill, minmax(220px, 1fr))",
-          gap: "15px",
-        }}
-      >
-        {pets.map((pet) => (
-          <button
-            key={pet.id}
-            onClick={() =>
-              onSelect(pet)
-            }
-            style={{
-              background: "#1c1c1c",
-              color: "white",
-              border: "1px solid #444",
-              borderRadius: "12px",
-              padding: "18px",
-              textAlign: "left",
-              cursor: "pointer",
-            }}
-          >
-            <h3>{pet.name}</h3>
-
-            <p>
-              Tier: {pet.tier}
-            </p>
-
-            <p>
-              ⚔️ {pet.attack} ATK
-            </p>
-
-            <p>
-              🛡️ {pet.defense} DEF
-            </p>
-
-            <p>
-              ❤️ {pet.max_health} HP
-            </p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Battle Arena</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Real-time turn-based multiplayer battles</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={loadBattles} className="p-2 rounded-lg bg-white border border-slate-300 text-slate-400 hover:text-slate-700 transition">
+            <RefreshCw className="w-4 h-4" />
           </button>
-        ))}
+          <button
+            onClick={() => { setCreateOpen(true); setError(null); }}
+            disabled={eligiblePets.length === 0}
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold rounded-lg transition flex items-center gap-2 disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" /> Create Battle
+          </button>
+        </div>
       </div>
+
+      {error && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3">{error}</div>}
+
+      {myActiveBattles.length > 0 && (
+        <div>
+          <h2 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-3">Your Active Battles</h2>
+          <div className="space-y-3">
+            {myActiveBattles.map((b) => (
+              <BattleRow key={b.id} battle={b} highlight onClick={() => setActiveBattle(b)} actionLabel="Enter Battle" actionIcon={<LogIn className="w-4 h-4" />} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {myWaitingBattles.length > 0 && (
+        <div>
+          <h2 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-3">Waiting for Opponent</h2>
+          <div className="space-y-3">
+            {myWaitingBattles.map((b) => (
+              <BattleRow key={b.id} battle={b} onClick={() => handleCancel(b.id)} actionLabel="Cancel" actionIcon={<X className="w-4 h-4" />} cancel />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h2 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-3">Open Battles</h2>
+        {waitingBattles.length === 0 ? (
+          <EmptyState icon={<Swords className="w-12 h-12" />} title="No open battles" subtitle="Create a battle and wait for another player to join." />
+        ) : (
+          <div className="space-y-3">
+            {waitingBattles.map((b) => (
+              <BattleRow key={b.id} battle={b} onClick={() => { setJoinBattle(b); setError(null); setSelectedPet(null); }} actionLabel="Join Battle" actionIcon={<LogIn className="w-4 h-4" />} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <PetSelectModal open={createOpen} onClose={() => setCreateOpen(false)} pets={eligiblePets} selectedPet={selectedPet} onSelect={setSelectedPet} onConfirm={handleCreate} busy={busy} title="Create Battle" confirmLabel="Create Battle" tierLimit={null} />
+
+      <PetSelectModal
+        open={!!joinBattle}
+        onClose={() => setJoinBattle(null)}
+        pets={eligiblePets.filter((p) => TIER_ORDER.indexOf(p.tier as Tier) <= TIER_ORDER.indexOf(joinBattle?.creator_pet?.tier as Tier))}
+        selectedPet={selectedPet}
+        onSelect={setSelectedPet}
+        onConfirm={handleJoin}
+        busy={busy}
+        title={`Join Battle (max tier: ${joinBattle?.creator_pet?.tier})`}
+        confirmLabel="Join Battle"
+        tierLimit={joinBattle?.creator_pet?.tier ?? null}
+      />
     </div>
   );
 }
 
-const buttonStyle: React.CSSProperties = {
-  padding: "12px 18px",
-  border: "none",
-  borderRadius: "8px",
-  background: "#4f46e5",
-  color: "white",
-  fontWeight: "bold",
-  cursor: "pointer",
-  marginRight: "10px",
-};
+function BattleRow({ battle, onClick, actionLabel, actionIcon, highlight, cancel }:
+  { battle: Battle; onClick: () => void; actionLabel: string; actionIcon: React.ReactNode; highlight?: boolean; cancel?: boolean; }) {
+  const cPet = battle.creator_pet;
+  return (
+    <div className={`flex items-center gap-4 p-4 rounded-2xl border transition ${highlight ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white"} hover:border-slate-400`}>
+      {cPet && <PetAvatar tier={cPet.tier} species={cPet.species} spriteSeed={cPet.sprite_seed} size={48} />}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-slate-800">{battle.creator?.username}'s {cPet?.name}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          {cPet && <TierBadge tier={cPet.tier} size="sm" />}
+          <span className="text-xs text-slate-500 flex items-center gap-1">
+            <Clock className="w-3 h-3" /> {new Date(battle.created_at).toLocaleTimeString()}
+          </span>
+        </div>
+      </div>
+      <button
+        onClick={onClick}
+        className={`px-4 py-2 text-sm font-semibold rounded-lg transition flex items-center gap-1.5 ${cancel ? "bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-300" : "bg-rose-600 hover:bg-rose-500 text-white"}`}
+      >
+        {actionIcon} {actionLabel}
+      </button>
+    </div>
+  );
+}
 
-const inputStyle: React.CSSProperties = {
-  padding: "12px",
-  borderRadius: "8px",
-  border: "1px solid #555",
-  background: "#111",
-  color: "white",
-  marginRight: "10px",
-  width: "280px",
-};
+function ActiveBattleView({ battle, logs, userId, onAttack, onLeave, busy, error, logEndRef }:
+  { battle: Battle; logs: CombatLog[]; userId: string; onAttack: () => void; onLeave: () => void; busy: boolean; error: string | null; logEndRef: React.RefObject<HTMLDivElement>; }) {
+  const cPet = battle.creator_pet;
+  const jPet = battle.joiner_pet;
+  const isCreator = battle.creator_id === userId;
+  const myPet = isCreator ? cPet : jPet;
+  const oppPet = isCreator ? jPet : cPet;
+  const myHp = isCreator ? battle.creator_current_hp : battle.joiner_current_hp;
+  const oppHp = isCreator ? battle.joiner_current_hp : battle.creator_current_hp;
+  const myTurn = battle.current_turn_player_id === userId;
+  const finished = battle.status === "finished";
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <button onClick={onLeave} className="text-slate-400 hover:text-slate-700 text-sm flex items-center gap-1">
+          <X className="w-4 h-4" /> Leave Battle
+        </button>
+        {finished && (
+          <div className="flex items-center gap-2 text-amber-600 font-bold">
+            <Trophy className="w-5 h-5" /> {battle.winner_name} wins!
+          </div>
+        )}
+      </div>
+
+      {error && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3">{error}</div>}
+
+      <div className="grid grid-cols-2 gap-4">
+        {/* Opponent */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Opponent</p>
+          {oppPet ? (
+            <>
+              <div className="flex items-center gap-3 mb-3">
+                <PetAvatar tier={oppPet.tier} species={oppPet.species} spriteSeed={oppPet.sprite_seed} size={56} />
+                <div>
+                  <p className="font-bold text-slate-800">{oppPet.name}</p>
+                  <TierBadge tier={oppPet.tier} size="sm" />
+                </div>
+              </div>
+              <HpBar current={oppHp ?? 0} max={oppPet.max_health} />
+            </>
+          ) : <p className="text-slate-400 text-sm">Waiting...</p>}
+        </div>
+
+        {/* You */}
+        <div className="rounded-2xl border border-sky-300 bg-sky-50 p-4">
+          <p className="text-xs text-sky-500 uppercase tracking-wider mb-2">You</p>
+          {myPet ? (
+            <>
+              <div className="flex items-center gap-3 mb-3">
+                <PetAvatar tier={myPet.tier} species={myPet.species} spriteSeed={myPet.sprite_seed} size={56} />
+                <div>
+                  <p className="font-bold text-slate-800">{myPet.name}</p>
+                  <TierBadge tier={myPet.tier} size="sm" />
+                </div>
+              </div>
+              <HpBar current={myHp ?? 0} max={myPet.max_health} />
+            </>
+          ) : <p className="text-slate-400 text-sm">No pet</p>}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider">Combat Log</h3>
+          <span className="text-xs text-slate-400">Round {battle.round_number}</span>
+        </div>
+        <div className="max-h-64 overflow-y-auto space-y-1.5 pr-2">
+          {logs.length === 0 ? (
+            <p className="text-slate-400 text-sm text-center py-4">Battle has not started yet.</p>
+          ) : (
+            logs.map((l) => (
+              <p key={l.id} className={`text-sm px-3 py-1.5 rounded-lg ${l.actor_player_id === userId ? "bg-sky-50 text-sky-700" : l.actor_player_id === null ? "bg-amber-50 text-amber-700 font-medium" : "bg-slate-50 text-slate-600"}`}>
+                {l.message}
+              </p>
+            ))
+          )}
+          <div ref={logEndRef} />
+        </div>
+      </div>
+
+      {!finished && (
+        <button
+          onClick={onAttack}
+          disabled={busy || !myTurn}
+          className="w-full py-3 bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white font-bold rounded-xl transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          {busy ? <Spinner size={18} /> : <Zap className="w-5 h-5" />}
+          {myTurn ? "Attack!" : "Waiting for opponent..."}
+        </button>
+      )}
+
+      {finished && (
+        <div className="text-center">
+          <button onClick={onLeave} className="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-lg transition">
+            Back to Arena
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PetSelectModal({ open, onClose, pets, selectedPet, onSelect, onConfirm, busy, title, confirmLabel, tierLimit }:
+  { open: boolean; onClose: () => void; pets: Pet[]; selectedPet: Pet | null; onSelect: (p: Pet) => void; onConfirm: () => void; busy: boolean; title: string; confirmLabel: string; tierLimit: Tier | null; }) {
+  return (
+    <Modal open={open} onClose={onClose} title={title}>
+      {pets.length === 0 ? (
+        <p className="text-slate-500 text-sm text-center py-6">
+          {tierLimit ? `You have no eligible pets at or below ${tierLimit} tier.` : "You have no eligible pets for battle."}
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {tierLimit && (
+            <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2 border border-slate-200">
+              This battle is limited to pets of <span className="text-slate-800 font-semibold">{tierLimit}</span> tier or lower.
+            </p>
+          )}
+          <div className="max-h-64 overflow-y-auto space-y-2">
+            {pets.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => onSelect(p)}
+                className={`w-full flex items-center gap-3 p-2 rounded-lg border transition text-left ${selectedPet?.id === p.id ? "border-rose-400 bg-rose-50" : "border-slate-200 bg-slate-50 hover:border-slate-400"}`}
+              >
+                <PetAvatar tier={p.tier} species={p.species} spriteSeed={p.sprite_seed} size={44} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800 truncate">{p.name}</p>
+                  <p className="text-xs text-slate-400">HP {p.max_health} · ATK {p.attack} · DEF {p.defense}</p>
+                </div>
+                <TierBadge tier={p.tier} size="sm" />
+              </button>
+            ))}
+          </div>
+          <button onClick={onConfirm} disabled={busy || !selectedPet} className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2">
+            {busy ? <Spinner size={16} /> : <Swords className="w-4 h-4" />}
+            {confirmLabel}
+          </button>
+        </div>
+      )}
+    </Modal>
+  );
+}
