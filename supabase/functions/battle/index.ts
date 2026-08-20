@@ -213,12 +213,6 @@ Deno.serve(async (req: Request) => {
         },
       );
 
-      /*
-       * IMPORTANT:
-       * We intentionally use select("*") here.
-       * This prevents the query from failing because
-       * one expected pet column is missing.
-       */
       const {
         data: pet,
         error: petError,
@@ -397,8 +391,10 @@ Deno.serve(async (req: Request) => {
               "Could not find battle.",
             details:
               battleError.message,
-            code: battleError.code,
-            hint: battleError.hint,
+            code:
+              battleError.code,
+            hint:
+              battleError.hint,
           },
           500,
         );
@@ -506,8 +502,10 @@ Deno.serve(async (req: Request) => {
               "Could not find battle.",
             details:
               battleError.message,
-            code: battleError.code,
-            hint: battleError.hint,
+            code:
+              battleError.code,
+            hint:
+              battleError.hint,
           },
           500,
         );
@@ -542,7 +540,10 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      // ----------------------------------------------------------
       // Load joining pet
+      // ----------------------------------------------------------
+
       const {
         data: joinerPet,
         error: joinerPetError,
@@ -565,6 +566,7 @@ Deno.serve(async (req: Request) => {
             details:
               joinerPetError.message,
             code:
+              joinerPetErrorError?.code ??
               joinerPetError.code,
             hint:
               joinerPetError.hint,
@@ -576,7 +578,10 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      // ----------------------------------------------------------
       // Load creator pet
+      // ----------------------------------------------------------
+
       const {
         data: creatorPet,
         error: creatorPetError,
@@ -771,6 +776,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      // Lock joiner's pet
       const {
         error: joinerLockError,
       } = await admin
@@ -785,8 +791,19 @@ Deno.serve(async (req: Request) => {
           "JOINER PET LOCK ERROR",
           joinerLockError,
         );
+
+        return json(
+          {
+            error:
+              "Battle started, but the joining pet could not be locked.",
+            details:
+              joinerLockError.message,
+          },
+          500,
+        );
       }
 
+      // Initial combat log
       const {
         error: logError,
       } = await admin
@@ -1006,6 +1023,10 @@ Deno.serve(async (req: Request) => {
 
       const logs: string[] = [];
 
+      // ==========================================================
+      // PASSIVES
+      // ==========================================================
+
       // REGEN
       const regen =
         passiveVal(
@@ -1093,6 +1114,10 @@ Deno.serve(async (req: Request) => {
         multiChance
           ? 1
           : 0);
+
+      // ==========================================================
+      // DAMAGE
+      // ==========================================================
 
       for (
         let h = 0;
@@ -1217,6 +1242,10 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // ==========================================================
+      // NEW HP
+      // ==========================================================
+
       const newCreatorHp =
         attackerIsCreator
           ? attackerHp
@@ -1226,6 +1255,10 @@ Deno.serve(async (req: Request) => {
         attackerIsCreator
           ? defenderHp
           : attackerHp;
+
+      // ==========================================================
+      // DETERMINE WINNER
+      // ==========================================================
 
       let winnerId:
         | string
@@ -1243,10 +1276,13 @@ Deno.serve(async (req: Request) => {
         defenderHp <= 0 &&
         attackerHp <= 0
       ) {
+        // Attacker wins ties.
         winnerId =
           attacker.owner_id;
+
         winnerPet =
           attacker;
+
         loserPet =
           defender;
       } else if (
@@ -1254,8 +1290,10 @@ Deno.serve(async (req: Request) => {
       ) {
         winnerId =
           attacker.owner_id;
+
         winnerPet =
           attacker;
+
         loserPet =
           defender;
       } else if (
@@ -1263,15 +1301,17 @@ Deno.serve(async (req: Request) => {
       ) {
         winnerId =
           defender.owner_id;
+
         winnerPet =
           defender;
+
         loserPet =
           attacker;
       }
 
-      // ============================================================
-      // FINISHED
-      // ============================================================
+      // ==========================================================
+      // BATTLE FINISHED
+      // ==========================================================
 
       if (
         winnerId &&
@@ -1281,6 +1321,7 @@ Deno.serve(async (req: Request) => {
         const winnerName =
           winnerPet.name;
 
+        // First update the battle itself.
         const {
           error: finishError,
         } = await admin
@@ -1288,14 +1329,19 @@ Deno.serve(async (req: Request) => {
           .update({
             creator_current_hp:
               newCreatorHp,
+
             joiner_current_hp:
               newJoinerHp,
+
             status:
               "finished",
+
             winner_id:
               winnerId,
+
             winner_name:
               winnerName,
+
             updated_at:
               new Date().toISOString(),
           })
@@ -1320,7 +1366,10 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        // Combat logs
+        // --------------------------------------------------------
+        // Save attack logs
+        // --------------------------------------------------------
+
         for (const message of logs) {
           const {
             error: logError,
@@ -1331,10 +1380,13 @@ Deno.serve(async (req: Request) => {
             .insert({
               battle_id:
                 battleId,
+
               round_number:
                 battle.round_number,
+
               actor_player_id:
                 user.id,
+
               message,
             });
 
@@ -1346,106 +1398,10 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        await admin
-          .from(
-            "battle_combat_logs",
-          )
-          .insert({
-            battle_id:
-              battleId,
-            round_number:
-              battle.round_number,
-            actor_player_id:
-              null,
-            message:
-              `${winnerName} wins the battle! ` +
-              `${loserPet.name} is battle-locked for 24 hours.`,
-          });
+        // --------------------------------------------------------
+        // TRANSFER ACTUAL LOSING PET
+        // --------------------------------------------------------
 
-        // ============================================================
-        // CREATE WINNER CLONE
-        // ============================================================
-
-        const {
-          error: cloneError,
-        } = await admin
-          .from("pets")
-          .insert({
-            owner_id:
-              winnerId,
-
-            name:
-              `${loserPet.name} (Clone)`,
-
-            species:
-              loserPet.species ??
-              "Cloned Beast",
-
-            tier:
-              loserPet.tier,
-
-            sprite_seed:
-              loserPet.sprite_seed,
-
-            appearance:
-              loserPet.appearance ??
-              "A battle-forged clone",
-
-            personality:
-              loserPet.personality ??
-              "forged in defeat",
-
-            description:
-              `A non-tradeable clone of ${loserPet.name}, won in battle.`,
-
-            passive_name:
-              loserPet.passive_name,
-
-            passive_description:
-              loserPet.passive_description,
-
-            passive_effect:
-              loserPet.passive_effect,
-
-            attack:
-              loserPet.attack,
-
-            defense:
-              loserPet.defense,
-
-            speed:
-              loserPet.speed,
-
-            max_health:
-              loserPet.max_health,
-
-            crit_chance:
-              loserPet.crit_chance,
-
-            multi_attack_chance:
-              loserPet.multi_attack_chance,
-
-            tradeable:
-              false,
-
-            is_clone:
-              true,
-
-            in_battle:
-              false,
-
-            battle_locked_until:
-              null,
-          });
-
-        if (cloneError) {
-          console.error(
-            "CLONE CREATION ERROR",
-            cloneError,
-          );
-        }
-
-        // Loser gets 24-hour lock
         const lockUntil =
           new Date(
             Date.now() +
@@ -1455,14 +1411,25 @@ Deno.serve(async (req: Request) => {
                 1000,
           ).toISOString();
 
+        /*
+         * IMPORTANT:
+         *
+         * We are NOT creating a clone.
+         *
+         * The actual losing pet row is transferred
+         * to the winner by changing owner_id.
+         */
         const {
-          error:
-            loserUpdateError,
+          error: transferError,
         } = await admin
           .from("pets")
           .update({
+            owner_id:
+              winnerId,
+
             in_battle:
               false,
+
             battle_locked_until:
               lockUntil,
           })
@@ -1471,17 +1438,36 @@ Deno.serve(async (req: Request) => {
             loserPet.id,
           );
 
-        if (loserUpdateError) {
+        if (transferError) {
           console.error(
-            "LOSER UPDATE ERROR",
-            loserUpdateError,
+            "LOSER PET TRANSFER ERROR",
+            transferError,
+          );
+
+          return json(
+            {
+              error:
+                "Battle finished, but the losing pet could not be transferred.",
+              details:
+                transferError.message,
+              code:
+                transferError.code,
+              hint:
+                transferError.hint,
+              pet_id:
+                loserPet.id,
+            },
+            500,
           );
         }
 
-        // Winner released
+        // --------------------------------------------------------
+        // RELEASE WINNER'S PET
+        // --------------------------------------------------------
+
         const {
           error:
-            winnerUpdateError,
+            winnerReleaseError,
         } = await admin
           .from("pets")
           .update({
@@ -1493,10 +1479,43 @@ Deno.serve(async (req: Request) => {
             winnerPet.id,
           );
 
-        if (winnerUpdateError) {
+        if (winnerReleaseError) {
           console.error(
-            "WINNER UPDATE ERROR",
-            winnerUpdateError,
+            "WINNER PET RELEASE ERROR",
+            winnerReleaseError,
+          );
+        }
+
+        // --------------------------------------------------------
+        // FINAL LOG
+        // --------------------------------------------------------
+
+        const {
+          error: finalLogError,
+        } = await admin
+          .from(
+            "battle_combat_logs",
+          )
+          .insert({
+            battle_id:
+              battleId,
+
+            round_number:
+              battle.round_number,
+
+            actor_player_id:
+              null,
+
+            message:
+              `${winnerName} wins the battle! ` +
+              `${loserPet.name} now belongs to the winner ` +
+              `and is battle-locked for 24 hours.`,
+          });
+
+        if (finalLogError) {
+          console.error(
+            "FINAL COMBAT LOG ERROR",
+            finalLogError,
           );
         }
 
@@ -1505,12 +1524,16 @@ Deno.serve(async (req: Request) => {
           finished: true,
           winner_id:
             winnerId,
+          winner_pet_id:
+            winnerPet.id,
+          transferred_pet_id:
+            loserPet.id,
         });
       }
 
-      // ============================================================
+      // ==========================================================
       // NEXT TURN
-      // ============================================================
+      // ==========================================================
 
       const nextTurn =
         attackerIsCreator
@@ -1544,12 +1567,16 @@ Deno.serve(async (req: Request) => {
         .update({
           creator_current_hp:
             newCreatorHp,
+
           joiner_current_hp:
             newJoinerHp,
+
           current_turn_player_id:
             nextTurn,
+
           round_number:
             nextRound,
+
           updated_at:
             new Date().toISOString(),
         })
@@ -1578,7 +1605,10 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Combat logs
+      // ----------------------------------------------------------
+      // COMBAT LOGS
+      // ----------------------------------------------------------
+
       for (const message of logs) {
         const {
           error: logError,
@@ -1589,10 +1619,13 @@ Deno.serve(async (req: Request) => {
           .insert({
             battle_id:
               battleId,
+
             round_number:
               battle.round_number,
+
             actor_player_id:
               user.id,
+
             message,
           });
 
