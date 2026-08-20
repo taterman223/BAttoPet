@@ -1,1603 +1,689 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-const TIER_INDEX: Record<string, number> = {
-  Worthless: 1,
-  Average: 2,
-  Decent: 3,
-  Good: 4,
-  Fabulous: 5,
-  Excellent: 6,
+type Battle = {
+  id: string;
+  creator_id: string;
+  creator_pet_id: string;
+  creator_current_hp: number;
+  joiner_id: string | null;
+  joiner_pet_id: string | null;
+  joiner_current_hp: number | null;
+  current_turn_player_id: string | null;
+  round_number: number;
+  status: string;
+  winner_id: string | null;
+  winner_name: string | null;
 };
 
 type Pet = {
   id: string;
-  owner_id: string;
   name: string;
-  species: string | null;
+  species?: string | null;
   tier: string;
-  appearance: string | null;
-  personality: string | null;
-  description: string | null;
-  passive_name: string | null;
-  passive_description: string | null;
-  passive_effect: {
-    type?: string;
-    value?: number;
-  } | null;
   attack: number;
   defense: number;
-  speed: number;
   max_health: number;
   crit_chance: number;
   multi_attack_chance: number;
-  tradeable: boolean;
-  is_clone: boolean;
-  in_battle: boolean;
-  battle_locked_until: string | null;
+  passive_effect?: {
+    type?: string;
+    value?: number;
+  } | null;
 };
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
-}
+type CombatLog = {
+  id: string;
+  message: string;
+  round_number: number;
+};
 
-function eligible(pet: Pet): string | null {
-  if (pet.in_battle) {
-    return "This pet is already in a battle.";
-  }
+export default function BattleArena() {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [pet, setPet] = useState<Pet | null>(null);
+  const [battle, setBattle] = useState<Battle | null>(null);
+  const [logs, setLogs] = useState<CombatLog[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [battleIdInput, setBattleIdInput] = useState("");
 
-  if (
-    pet.battle_locked_until &&
-    new Date(pet.battle_locked_until) > new Date()
-  ) {
-    return "This pet is battle-locked for 24 hours after a loss.";
-  }
+  useEffect(() => {
+    loadUser();
+  }, []);
 
-  return null;
-}
-
-function passiveVal(pet: Pet, type: string): number {
-  if (!pet.passive_effect) return 0;
-
-  if (pet.passive_effect.type !== type) return 0;
-
-  return Number(pet.passive_effect.value ?? 0);
-}
-
-/*
- * IMPORTANT:
- *
- * Keep this list limited to columns that your pets table actually uses.
- *
- * If your pets table has additional columns, they do not need to be here
- * for battles to work.
- */
-const PET_COLUMNS = `
-  id,
-  owner_id,
-  name,
-  species,
-  tier,
-  appearance,
-  personality,
-  description,
-  passive_name,
-  passive_description,
-  passive_effect,
-  attack,
-  defense,
-  speed,
-  max_health,
-  crit_chance,
-  multi_attack_chance,
-  tradeable,
-  is_clone,
-  in_battle,
-  battle_locked_until
-`;
-
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
-  }
-
-  try {
-    /*
-     * ------------------------------------------------------------
-     * AUTH
-     * ------------------------------------------------------------
-     */
-
-    const authorization = req.headers.get("Authorization") ?? "";
-
-    const token = authorization
-      .replace(/^Bearer\s+/i, "")
-      .trim();
-
-    if (!token) {
-      return json(
-        {
-          error: "Missing authorization token.",
-        },
-        401,
-      );
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get(
-      "SUPABASE_SERVICE_ROLE_KEY",
-    );
-
-    if (!supabaseUrl) {
-      return json(
-        {
-          error: "SUPABASE_URL is missing from Edge Function secrets.",
-        },
-        500,
-      );
-    }
-
-    if (!serviceRoleKey) {
-      return json(
-        {
-          error:
-            "SUPABASE_SERVICE_ROLE_KEY is missing from Edge Function secrets.",
-        },
-        500,
-      );
-    }
-
-    /*
-     * Service-role client.
-     *
-     * This is intentionally used for the server-side battle logic.
-     */
-    const admin = createClient(
-      supabaseUrl,
-      serviceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      },
-    );
-
-    /*
-     * Verify the user's JWT.
-     */
+  async function loadUser() {
     const {
-      data: userData,
-      error: authError,
-    } = await admin.auth.getUser(token);
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (authError || !userData?.user) {
-      return json(
-        {
-          error: "You must be signed in.",
-          details: authError?.message ?? "Invalid session.",
-        },
-        401,
-      );
+    if (!user) {
+      setMessage("You must be signed in.");
+      return;
     }
 
-    const user = userData.user;
+    setUserId(user.id);
+  }
 
-    /*
-     * Read request body.
-     */
-    let body: Record<string, unknown>;
+  async function loadPet(petId: string) {
+    const { data, error } = await supabase
+      .from("pets")
+      .select(`
+        id,
+        name,
+        species,
+        tier,
+        attack,
+        defense,
+        max_health,
+        crit_chance,
+        multi_attack_chance,
+        passive_effect
+      `)
+      .eq("id", petId)
+      .maybeSingle();
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setPet(data as Pet);
+  }
+
+  async function callBattle(
+    action: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    setLoading(true);
+    setMessage("");
 
     try {
-      body = await req.json();
-    } catch {
-      return json(
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        setMessage("You must be signed in.");
+        return null;
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/battle`,
         {
-          error: "Invalid JSON request.",
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            action,
+            ...extra,
+          }),
         },
-        400,
       );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            data?.details ||
+            "Battle request failed.",
+        );
+      }
+
+      return data;
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Battle request failed.",
+      );
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createBattle() {
+    if (!pet) {
+      setMessage("Select a pet first.");
+      return;
     }
 
-    const action = String(body?.action ?? "").trim();
-
-    if (!action) {
-      return json(
-        {
-          error: "No battle action supplied.",
-        },
-        400,
-      );
-    }
-
-    console.log("BATTLE REQUEST", {
-      action,
-      userId: user.id,
+    const result = await callBattle("create", {
+      pet_id: pet.id,
     });
 
-    /*
-     * ============================================================
-     * CREATE
-     * ============================================================
-     */
+    if (!result) return;
 
-    if (action === "create") {
-      const petId = String(
-        body?.pet_id ?? "",
-      ).trim();
+    setMessage(`Battle created! ID: ${result.battle_id}`);
 
-      if (!petId) {
-        return json(
-          {
-            error: "No pet_id was supplied.",
-            user_id: user.id,
-          },
-          400,
-        );
-      }
+    await loadBattle(result.battle_id);
+  }
 
-      console.log("BATTLE CREATE PET LOOKUP", {
-        petId,
-        userId: user.id,
-      });
-
-      /*
-       * Get the pet.
-       */
-      const {
-        data: pet,
-        error: petError,
-      } = await admin
-        .from("pets")
-        .select(PET_COLUMNS)
-        .eq("id", petId)
-        .maybeSingle();
-
-      /*
-       * THIS IS THE IMPORTANT PART.
-       *
-       * Instead of hiding the real database error, return it.
-       */
-      if (petError) {
-        console.error(
-          "PET LOOKUP DATABASE ERROR",
-          {
-            message: petError.message,
-            code: petError.code,
-            details: petError.details,
-            hint: petError.hint,
-            petId,
-            userId: user.id,
-          },
-        );
-
-        return json(
-          {
-            error: "Database error while finding pet.",
-            details: petError.message,
-            code: petError.code,
-            hint: petError.hint,
-            database_details: petError.details,
-            pet_id: petId,
-            user_id: user.id,
-          },
-          500,
-        );
-      }
-
-      if (!pet) {
-        return json(
-          {
-            error: "Pet not found.",
-            pet_id: petId,
-            user_id: user.id,
-          },
-          404,
-        );
-      }
-
-      const typedPet = pet as unknown as Pet;
-
-      if (typedPet.owner_id !== user.id) {
-        return json(
-          {
-            error: "You do not own this pet.",
-          },
-          403,
-        );
-      }
-
-      const eligibilityError = eligible(typedPet);
-
-      if (eligibilityError) {
-        return json(
-          {
-            error: eligibilityError,
-          },
-          400,
-        );
-      }
-
-      /*
-       * Create battle.
-       */
-      const {
-        data: battle,
-        error: battleError,
-      } = await admin
-        .from("battles")
-        .insert({
-          creator_id: user.id,
-          creator_pet_id: typedPet.id,
-          creator_current_hp: typedPet.max_health,
-          status: "waiting",
-        })
-        .select()
-        .single();
-
-      if (battleError) {
-        console.error(
-          "BATTLE CREATE ERROR",
-          battleError,
-        );
-
-        return json(
-          {
-            error: "Could not create the battle.",
-            details: battleError.message,
-            code: battleError.code,
-            hint: battleError.hint,
-          },
-          500,
-        );
-      }
-
-      /*
-       * Lock pet into battle.
-       */
-      const {
-        error: lockError,
-      } = await admin
-        .from("pets")
-        .update({
-          in_battle: true,
-        })
-        .eq("id", typedPet.id);
-
-      if (lockError) {
-        console.error(
-          "PET LOCK ERROR",
-          lockError,
-        );
-
-        /*
-         * Remove the battle if locking failed.
-         */
-        await admin
-          .from("battles")
-          .delete()
-          .eq("id", battle.id);
-
-        return json(
-          {
-            error: "Could not lock pet for battle.",
-            details: lockError.message,
-            code: lockError.code,
-            hint: lockError.hint,
-          },
-          500,
-        );
-      }
-
-      return json({
-        ok: true,
-        battle_id: battle.id,
-      });
+  async function joinBattle() {
+    if (!pet) {
+      setMessage("Select a pet first.");
+      return;
     }
 
-    /*
-     * ============================================================
-     * CANCEL
-     * ============================================================
-     */
-
-    if (action === "cancel") {
-      const battleId = String(
-        body?.battle_id ?? "",
-      ).trim();
-
-      if (!battleId) {
-        return json(
-          {
-            error: "No battle_id was supplied.",
-          },
-          400,
-        );
-      }
-
-      const {
-        data: battle,
-        error: battleError,
-      } = await admin
-        .from("battles")
-        .select("*")
-        .eq("id", battleId)
-        .maybeSingle();
-
-      if (battleError) {
-        return json(
-          {
-            error: "Could not find battle.",
-            details: battleError.message,
-            code: battleError.code,
-            hint: battleError.hint,
-          },
-          500,
-        );
-      }
-
-      if (!battle) {
-        return json(
-          {
-            error: "Battle not found.",
-          },
-          404,
-        );
-      }
-
-      if (battle.creator_id !== user.id) {
-        return json(
-          {
-            error: "Only the creator can cancel.",
-          },
-          403,
-        );
-      }
-
-      if (battle.status !== "waiting") {
-        return json(
-          {
-            error:
-              "This battle can no longer be cancelled.",
-          },
-          400,
-        );
-      }
-
-      const {
-        error: cancelError,
-      } = await admin
-        .from("battles")
-        .update({
-          status: "cancelled",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", battleId)
-        .eq("status", "waiting");
-
-      if (cancelError) {
-        return json(
-          {
-            error: "Could not cancel battle.",
-            details: cancelError.message,
-            code: cancelError.code,
-            hint: cancelError.hint,
-          },
-          500,
-        );
-      }
-
-      const {
-        error: unlockError,
-      } = await admin
-        .from("pets")
-        .update({
-          in_battle: false,
-        })
-        .eq("id", battle.creator_pet_id);
-
-      if (unlockError) {
-        console.error(
-          "PET UNLOCK ERROR",
-          unlockError,
-        );
-      }
-
-      return json({
-        ok: true,
-      });
+    if (!battleIdInput.trim()) {
+      setMessage("Enter a battle ID.");
+      return;
     }
 
-    /*
-     * ============================================================
-     * JOIN
-     * ============================================================
-     */
+    const result = await callBattle("join", {
+      battle_id: battleIdInput.trim(),
+      pet_id: pet.id,
+    });
 
-    if (action === "join") {
-      const battleId = String(
-        body?.battle_id ?? "",
-      ).trim();
+    if (!result) return;
 
-      const petId = String(
-        body?.pet_id ?? "",
-      ).trim();
+    setMessage("Battle joined!");
 
-      if (!battleId || !petId) {
-        return json(
-          {
-            error:
-              "battle_id and pet_id are required.",
-          },
-          400,
-        );
-      }
+    await loadBattle(battleIdInput.trim());
+  }
 
-      const {
-        data: battle,
-        error: battleError,
-      } = await admin
-        .from("battles")
-        .select("*")
-        .eq("id", battleId)
-        .maybeSingle();
+  async function attack() {
+    if (!battle) return;
 
-      if (battleError) {
-        return json(
-          {
-            error: "Could not find battle.",
-            details: battleError.message,
-            code: battleError.code,
-            hint: battleError.hint,
-          },
-          500,
-        );
-      }
+    const result = await callBattle("attack", {
+      battle_id: battle.id,
+    });
 
-      if (!battle) {
-        return json(
-          {
-            error: "Battle not found.",
-          },
-          404,
-        );
-      }
+    if (!result) return;
 
-      if (battle.status !== "waiting") {
-        return json(
-          {
-            error: "This battle is no longer open.",
-          },
-          409,
-        );
-      }
+    await loadBattle(battle.id);
 
-      if (battle.creator_id === user.id) {
-        return json(
-          {
-            error: "You cannot join your own battle.",
-          },
-          400,
-        );
-      }
+    if (result.finished) {
+      setMessage("Battle finished!");
+    }
+  }
 
-      /*
-       * Load joining pet.
-       */
-      const {
-        data: joinerPet,
-        error: joinerPetError,
-      } = await admin
-        .from("pets")
-        .select(PET_COLUMNS)
-        .eq("id", petId)
-        .maybeSingle();
+  async function cancelBattle() {
+    if (!battle) return;
 
-      if (joinerPetError) {
-        console.error(
-          "JOINER PET ERROR",
-          joinerPetError,
-        );
+    const result = await callBattle("cancel", {
+      battle_id: battle.id,
+    });
 
-        return json(
-          {
-            error:
-              "Database error while finding your pet.",
-            details: joinerPetError.message,
-            code: joinerPetError.code,
-            hint: joinerPetError.hint,
-            database_details:
-              joinerPetError.details,
-            pet_id: petId,
-          },
-          500,
-        );
-      }
+    if (!result) return;
 
-      /*
-       * Load creator pet.
-       */
-      const {
-        data: creatorPet,
-        error: creatorPetError,
-      } = await admin
-        .from("pets")
-        .select(PET_COLUMNS)
-        .eq("id", battle.creator_pet_id)
-        .maybeSingle();
+    setBattle(null);
+    setLogs([]);
+    setMessage("Battle cancelled.");
+  }
 
-      if (creatorPetError) {
-        console.error(
-          "CREATOR PET ERROR",
-          creatorPetError,
-        );
+  async function loadBattle(id: string) {
+    const { data, error } = await supabase
+      .from("battles")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
 
-        return json(
-          {
-            error:
-              "Database error while finding battle pet.",
-            details: creatorPetError.message,
-            code: creatorPetError.code,
-            hint: creatorPetError.hint,
-            database_details:
-              creatorPetError.details,
-            pet_id: battle.creator_pet_id,
-          },
-          500,
-        );
-      }
-
-      if (!joinerPet) {
-        return json(
-          {
-            error: "Your selected pet was not found.",
-            pet_id: petId,
-          },
-          404,
-        );
-      }
-
-      if (!creatorPet) {
-        return json(
-          {
-            error: "The battle creator's pet was not found.",
-            pet_id: battle.creator_pet_id,
-          },
-          404,
-        );
-      }
-
-      const typedJoiner = joinerPet as unknown as Pet;
-      const typedCreator = creatorPet as unknown as Pet;
-
-      if (typedJoiner.owner_id !== user.id) {
-        return json(
-          {
-            error: "You do not own this pet.",
-          },
-          403,
-        );
-      }
-
-      const joinerEligibility =
-        eligible(typedJoiner);
-
-      if (joinerEligibility) {
-        return json(
-          {
-            error: joinerEligibility,
-          },
-          400,
-        );
-      }
-
-      const creatorTier =
-        TIER_INDEX[typedCreator.tier] ?? 0;
-
-      const joinerTier =
-        TIER_INDEX[typedJoiner.tier] ?? 0;
-
-      if (creatorTier === 0) {
-        return json(
-          {
-            error:
-              `Invalid creator pet tier: ${typedCreator.tier}`,
-          },
-          500,
-        );
-      }
-
-      if (joinerTier === 0) {
-        return json(
-          {
-            error:
-              `Invalid joining pet tier: ${typedJoiner.tier}`,
-          },
-          400,
-        );
-      }
-
-      if (joinerTier > creatorTier) {
-        return json(
-          {
-            error:
-              `Your pet's tier is too high. It must be ${typedCreator.tier} or lower to join this battle.`,
-          },
-          400,
-        );
-      }
-
-      /*
-       * First strike passive.
-       */
-      const creatorFirst =
-        typedCreator.passive_effect?.type ===
-          "first_strike" &&
-        passiveVal(
-          typedCreator,
-          "first_strike",
-        ) > 0;
-
-      const joinerFirst =
-        typedJoiner.passive_effect?.type ===
-          "first_strike" &&
-        passiveVal(
-          typedJoiner,
-          "first_strike",
-        ) > 0;
-
-      let firstPlayer: string;
-
-      if (joinerFirst && !creatorFirst) {
-        firstPlayer = user.id;
-      } else {
-        firstPlayer = battle.creator_id;
-      }
-
-      /*
-       * Start battle.
-       */
-      const {
-        data: started,
-        error: startError,
-      } = await admin
-        .from("battles")
-        .update({
-          joiner_id: user.id,
-          joiner_pet_id: typedJoiner.id,
-          creator_current_hp:
-            typedCreator.max_health,
-          joiner_current_hp:
-            typedJoiner.max_health,
-          current_turn_player_id: firstPlayer,
-          round_number: 1,
-          status: "active",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", battleId)
-        .eq("status", "waiting")
-        .select()
-        .maybeSingle();
-
-      if (startError) {
-        return json(
-          {
-            error: "Could not start battle.",
-            details: startError.message,
-            code: startError.code,
-            hint: startError.hint,
-          },
-          500,
-        );
-      }
-
-      if (!started) {
-        return json(
-          {
-            error:
-              "This battle was just joined by someone else.",
-          },
-          409,
-        );
-      }
-
-      /*
-       * Lock joining pet.
-       */
-      const {
-        error: joinerLockError,
-      } = await admin
-        .from("pets")
-        .update({
-          in_battle: true,
-        })
-        .eq("id", typedJoiner.id);
-
-      if (joinerLockError) {
-        console.error(
-          "JOINER PET LOCK ERROR",
-          joinerLockError,
-        );
-      }
-
-      /*
-       * Initial combat log.
-       */
-      const {
-        error: logError,
-      } = await admin
-        .from("battle_combat_logs")
-        .insert({
-          battle_id: battleId,
-          round_number: 1,
-          actor_player_id: null,
-          message:
-            `${typedCreator.name} faces off against ${typedJoiner.name}! ` +
-            `${
-              firstPlayer === battle.creator_id
-                ? typedCreator.name
-                : typedJoiner.name
-            } strikes first.`,
-        });
-
-      if (logError) {
-        console.error(
-          "INITIAL COMBAT LOG ERROR",
-          logError,
-        );
-      }
-
-      return json({
-        ok: true,
-      });
+    if (error) {
+      setMessage(error.message);
+      return;
     }
 
-    /*
-     * ============================================================
-     * ATTACK
-     * ============================================================
-     */
-
-    if (action === "attack") {
-      const battleId = String(
-        body?.battle_id ?? "",
-      ).trim();
-
-      if (!battleId) {
-        return json(
-          {
-            error: "No battle_id was supplied.",
-          },
-          400,
-        );
-      }
-
-      const {
-        data: battle,
-        error: battleError,
-      } = await admin
-        .from("battles")
-        .select("*")
-        .eq("id", battleId)
-        .maybeSingle();
-
-      if (battleError) {
-        return json(
-          {
-            error: "Could not load battle.",
-            details: battleError.message,
-            code: battleError.code,
-            hint: battleError.hint,
-          },
-          500,
-        );
-      }
-
-      if (!battle) {
-        return json(
-          {
-            error: "Battle not found.",
-          },
-          404,
-        );
-      }
-
-      if (battle.status !== "active") {
-        return json(
-          {
-            error: "This battle is not active.",
-          },
-          400,
-        );
-      }
-
-      if (
-        battle.creator_id !== user.id &&
-        battle.joiner_id !== user.id
-      ) {
-        return json(
-          {
-            error: "You are not in this battle.",
-          },
-          403,
-        );
-      }
-
-      if (
-        battle.current_turn_player_id !==
-        user.id
-      ) {
-        return json(
-          {
-            error: "It is not your turn.",
-          },
-          400,
-        );
-      }
-
-      /*
-       * Load both pets.
-       */
-      const {
-        data: cPet,
-        error: cPetError,
-      } = await admin
-        .from("pets")
-        .select(PET_COLUMNS)
-        .eq("id", battle.creator_pet_id)
-        .maybeSingle();
-
-      const {
-        data: jPet,
-        error: jPetError,
-      } = await admin
-        .from("pets")
-        .select(PET_COLUMNS)
-        .eq("id", battle.joiner_pet_id)
-        .maybeSingle();
-
-      if (cPetError || jPetError) {
-        return json(
-          {
-            error:
-              "Database error while loading battle pets.",
-            creator_error:
-              cPetError
-                ? {
-                    message: cPetError.message,
-                    code: cPetError.code,
-                    details: cPetError.details,
-                    hint: cPetError.hint,
-                  }
-                : null,
-            joiner_error:
-              jPetError
-                ? {
-                    message: jPetError.message,
-                    code: jPetError.code,
-                    details: jPetError.details,
-                    hint: jPetError.hint,
-                  }
-                : null,
-          },
-          500,
-        );
-      }
-
-      if (!cPet || !jPet) {
-        return json(
-          {
-            error: "Battle pets are missing.",
-            creator_pet_id:
-              battle.creator_pet_id,
-            joiner_pet_id:
-              battle.joiner_pet_id,
-          },
-          500,
-        );
-      }
-
-      const creatorPet =
-        cPet as unknown as Pet;
-
-      const joinerPet =
-        jPet as unknown as Pet;
-
-      const attackerIsCreator =
-        user.id === battle.creator_id;
-
-      const attacker = attackerIsCreator
-        ? creatorPet
-        : joinerPet;
-
-      const defender = attackerIsCreator
-        ? joinerPet
-        : creatorPet;
-
-      let attackerHp = attackerIsCreator
-        ? Number(battle.creator_current_hp)
-        : Number(battle.joiner_current_hp);
-
-      let defenderHp = attackerIsCreator
-        ? Number(battle.joiner_current_hp)
-        : Number(battle.creator_current_hp);
-
-      const logs: string[] = [];
-
-      /*
-       * REGEN
-       */
-      const regen = passiveVal(
-        attacker,
-        "regen",
-      );
-
-      if (regen > 0) {
-        const heal = Math.round(
-          attacker.max_health * regen,
-        );
-
-        attackerHp = Math.min(
-          attacker.max_health,
-          attackerHp + heal,
-        );
-
-        logs.push(
-          `${attacker.name} regenerates ${heal} HP.`,
-        );
-      }
-
-      /*
-       * CRITICAL
-       */
-      const critChance = Math.min(
-        0.95,
-        Number(attacker.crit_chance ?? 0) +
-          passiveVal(
-            attacker,
-            "crit_up",
-          ),
-      );
-
-      /*
-       * MULTI ATTACK
-       */
-      const multiChance = Math.min(
-        0.9,
-        Number(
-          attacker.multi_attack_chance ?? 0,
-        ) +
-          passiveVal(
-            attacker,
-            "multi_up",
-          ),
-      );
-
-      /*
-       * LIFE STEAL
-       */
-      const lifesteal = passiveVal(
-        attacker,
-        "lifesteal",
-      );
-
-      /*
-       * EXECUTE
-       */
-      const execute = passiveVal(
-        attacker,
-        "execute",
-      );
-
-      /*
-       * DAMAGE REDUCTION
-       */
-      const reduction = Math.min(
-        0.9,
-        passiveVal(
-          defender,
-          "damage_reduction",
-        ),
-      );
-
-      /*
-       * THORNS
-       */
-      const thorns = passiveVal(
-        defender,
-        "thorns",
-      );
-
-      const hits =
-        1 +
-        (Math.random() < multiChance
-          ? 1
-          : 0);
-
-      for (
-        let h = 0;
-        h < hits && defenderHp > 0;
-        h++
-      ) {
-        const variance =
-          0.85 +
-          Math.random() * 0.3;
-
-        let damage =
-          (
-            Number(attacker.attack) -
-            Number(defender.defense) * 0.4
-          ) * variance;
-
-        damage = Math.max(
-          1,
-          damage,
-        );
-
-        const isCrit =
-          Math.random() < critChance;
-
-        if (isCrit) {
-          damage *= 1.75;
-        }
-
-        if (
-          execute > 0 &&
-          defenderHp <
-            defender.max_health * 0.3
-        ) {
-          damage *= 1 + execute;
-        }
-
-        if (reduction > 0) {
-          damage *= 1 - reduction;
-        }
-
-        damage = Math.max(
-          1,
-          Math.round(damage),
-        );
-
-        defenderHp = Math.max(
-          0,
-          defenderHp - damage,
-        );
-
-        logs.push(
-          `${attacker.name} hits ${defender.name} for ${damage}` +
-            `${isCrit ? " (CRITICAL!)" : ""}` +
-            `${
-              hits > 1
-                ? ` [hit ${h + 1}]`
-                : ""
-            }.`,
-        );
-
-        /*
-         * LIFE STEAL
-         */
-        if (lifesteal > 0) {
-          const heal = Math.round(
-            damage * lifesteal,
-          );
-
-          attackerHp = Math.min(
-            attacker.max_health,
-            attackerHp + heal,
-          );
-
-          if (heal > 0) {
-            logs.push(
-              `${attacker.name} drains ${heal} HP.`,
-            );
-          }
-        }
-
-        /*
-         * THORNS
-         */
-        if (
-          thorns > 0 &&
-          attackerHp > 0
-        ) {
-          const reflect = Math.max(
-            1,
-            Math.round(
-              damage * thorns,
-            ),
-          );
-
-          attackerHp = Math.max(
-            0,
-            attackerHp - reflect,
-          );
-
-          logs.push(
-            `${defender.name}'s barbs reflect ${reflect} damage.`,
-          );
-        }
-      }
-
-      /*
-       * Translate HP back to creator/joiner.
-       */
-      const newCreatorHp =
-        attackerIsCreator
-          ? attackerHp
-          : defenderHp;
-
-      const newJoinerHp =
-        attackerIsCreator
-          ? defenderHp
-          : attackerHp;
-
-      let winnerId: string | null = null;
-      let winnerPet: Pet | null = null;
-      let loserPet: Pet | null = null;
-
-      if (
-        defenderHp <= 0 &&
-        attackerHp <= 0
-      ) {
-        winnerId = attacker.owner_id;
-        winnerPet = attacker;
-        loserPet = defender;
-      } else if (
-        defenderHp <= 0
-      ) {
-        winnerId = attacker.owner_id;
-        winnerPet = attacker;
-        loserPet = defender;
-      } else if (
-        attackerHp <= 0
-      ) {
-        winnerId = defender.owner_id;
-        winnerPet = defender;
-        loserPet = attacker;
-      }
-
-      /*
-       * ==========================================================
-       * FINISHED
-       * ==========================================================
-       */
-
-      if (
-        winnerId &&
-        winnerPet &&
-        loserPet
-      ) {
-        const winnerName =
-          winnerPet.name;
-
-        const {
-          error: finishError,
-        } = await admin
-          .from("battles")
-          .update({
-            creator_current_hp:
-              newCreatorHp,
-            joiner_current_hp:
-              newJoinerHp,
-            status: "finished",
-            winner_id: winnerId,
-            winner_name: winnerName,
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("id", battleId);
-
-        if (finishError) {
-          return json(
-            {
-              error:
-                "Could not finish battle.",
-              details:
-                finishError.message,
-              code: finishError.code,
-              hint: finishError.hint,
-            },
-            500,
-          );
-        }
-
-        /*
-         * Combat logs.
-         */
-        for (const message of logs) {
-          await admin
-            .from("battle_combat_logs")
-            .insert({
-              battle_id: battleId,
-              round_number:
-                battle.round_number,
-              actor_player_id:
-                user.id,
-              message,
-            });
-        }
-
-        await admin
-          .from("battle_combat_logs")
-          .insert({
-            battle_id: battleId,
-            round_number:
-              battle.round_number,
-            actor_player_id: null,
-            message:
-              `${winnerName} wins the battle! ` +
-              `${loserPet.name} is battle-locked for 24 hours.`,
-          });
-
-        /*
-         * Create winner clone.
-         */
-        const {
-          error: cloneError,
-        } = await admin
-          .from("pets")
-          .insert({
-            owner_id: winnerId,
-
-            name:
-              `${loserPet.name} (Clone)`,
-
-            species:
-              loserPet.species ??
-              "Cloned Beast",
-
-            tier:
-              loserPet.tier,
-
-            appearance:
-              loserPet.appearance ??
-              "A battle-forged clone",
-
-            personality:
-              loserPet.personality ??
-              "forged in defeat",
-
-            description:
-              `A non-tradeable clone of ${loserPet.name}, won in battle.`,
-
-            passive_name:
-              loserPet.passive_name,
-
-            passive_description:
-              loserPet.passive_description,
-
-            passive_effect:
-              loserPet.passive_effect,
-
-            attack:
-              loserPet.attack,
-
-            defense:
-              loserPet.defense,
-
-            speed:
-              loserPet.speed ?? 0,
-
-            max_health:
-              loserPet.max_health,
-
-            crit_chance:
-              loserPet.crit_chance,
-
-            multi_attack_chance:
-              loserPet.multi_attack_chance,
-
-            tradeable: false,
-
-            is_clone: true,
-
-            in_battle: false,
-          });
-
-        if (cloneError) {
-          console.error(
-            "CLONE CREATION ERROR",
-            cloneError,
-          );
-
-          /*
-           * Battle still finishes even if clone
-           * creation fails.
-           */
-        }
-
-        /*
-         * Loser gets 24-hour battle lock.
-         */
-        const lockUntil =
-          new Date(
-            Date.now() +
-              24 * 60 * 60 * 1000,
-          ).toISOString();
-
-        const {
-          error: loserUpdateError,
-        } = await admin
-          .from("pets")
-          .update({
-            in_battle: false,
-            battle_locked_until:
-              lockUntil,
-          })
-          .eq("id", loserPet.id);
-
-        if (loserUpdateError) {
-          console.error(
-            "LOSER UPDATE ERROR",
-            loserUpdateError,
-          );
-        }
-
-        /*
-         * Winner is released from battle.
-         */
-        const {
-          error: winnerUpdateError,
-        } = await admin
-          .from("pets")
-          .update({
-            in_battle: false,
-          })
-          .eq("id", winnerPet.id);
-
-        if (winnerUpdateError) {
-          console.error(
-            "WINNER UPDATE ERROR",
-            winnerUpdateError,
-          );
-        }
-
-        return json({
-          ok: true,
-          finished: true,
-          winner_id: winnerId,
-        });
-      }
-
-      /*
-       * ==========================================================
-       * NEXT TURN
-       * ==========================================================
-       */
-
-      const nextTurn =
-        attackerIsCreator
-          ? battle.joiner_id
-          : battle.creator_id;
-
-      if (!nextTurn) {
-        return json(
-          {
-            error:
-              "Could not determine next player.",
-          },
-          500,
-        );
-      }
-
-      const nextRound =
-        nextTurn === battle.creator_id
-          ? Number(battle.round_number) + 1
-          : Number(battle.round_number);
-
-      const {
-        error: turnError,
-      } = await admin
-        .from("battles")
-        .update({
-          creator_current_hp:
-            newCreatorHp,
-
-          joiner_current_hp:
-            newJoinerHp,
-
-          current_turn_player_id:
-            nextTurn,
-
-          round_number:
-            nextRound,
-
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq("id", battleId)
-        .eq("status", "active");
-
-      if (turnError) {
-        return json(
-          {
-            error:
-              "Could not update battle turn.",
-            details:
-              turnError.message,
-            code:
-              turnError.code,
-            hint:
-              turnError.hint,
-          },
-          500,
-        );
-      }
-
-      /*
-       * Save combat logs.
-       */
-      for (const message of logs) {
-        const {
-          error: logError,
-        } = await admin
-          .from("battle_combat_logs")
-          .insert({
-            battle_id: battleId,
-            round_number:
-              battle.round_number,
-            actor_player_id:
-              user.id,
-            message,
-          });
-
-        if (logError) {
-          console.error(
-            "COMBAT LOG ERROR",
-            logError,
-          );
-        }
-      }
-
-      return json({
-        ok: true,
-        finished: false,
-      });
+    if (!data) {
+      setMessage("Battle not found.");
+      return;
     }
 
-    /*
-     * ============================================================
-     * UNKNOWN ACTION
-     * ============================================================
-     */
+    setBattle(data as Battle);
 
-    return json(
-      {
-        error:
-          `Unknown battle action: ${action}`,
-      },
-      400,
-    );
-  } catch (err) {
-    console.error(
-      "BATTLE FUNCTION CRASH",
-      err,
-    );
+    await loadBattleLogs(id);
 
-    return json(
-      {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Unknown server error.",
-      },
-      500,
+    if (data.creator_pet_id) {
+      await loadPet(data.creator_pet_id);
+    }
+  }
+
+  async function loadBattleLogs(id: string) {
+    const { data, error } = await supabase
+      .from("battle_combat_logs")
+      .select("id, message, round_number")
+      .eq("battle_id", id)
+      .order("id", {
+        ascending: true,
+      });
+
+    if (!error && data) {
+      setLogs(data as CombatLog[]);
+    }
+  }
+
+  const isMyTurn =
+    !!battle &&
+    !!userId &&
+    battle.current_turn_player_id === userId;
+
+  const battleFinished =
+    battle?.status === "finished";
+
+  const iAmCreator =
+    !!battle &&
+    !!userId &&
+    battle.creator_id === userId;
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        padding: "30px",
+        background: "#111",
+        color: "white",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "1000px",
+          margin: "0 auto",
+        }}
+      >
+        <h1>⚔️ Battle Arena</h1>
+
+        {message && (
+          <div
+            style={{
+              padding: "12px",
+              marginBottom: "20px",
+              background: "#222",
+              borderRadius: "8px",
+            }}
+          >
+            {message}
+          </div>
+        )}
+
+        {!pet && (
+          <PetSelector
+            userId={userId}
+            onSelect={(selectedPet) => {
+              setPet(selectedPet);
+              setMessage(
+                `Selected ${selectedPet.name}`,
+              );
+            }}
+          />
+        )}
+
+        {pet && !battle && (
+          <div
+            style={{
+              padding: "20px",
+              background: "#1c1c1c",
+              borderRadius: "12px",
+              marginBottom: "20px",
+            }}
+          >
+            <h2>
+              Selected Pet: {pet.name}
+            </h2>
+
+            <p>
+              Tier: {pet.tier}
+            </p>
+
+            <p>
+              ⚔️ Attack: {pet.attack}
+            </p>
+
+            <p>
+              🛡️ Defense: {pet.defense}
+            </p>
+
+            <p>
+              ❤️ Health: {pet.max_health}
+            </p>
+
+            <button
+              onClick={createBattle}
+              disabled={loading}
+              style={buttonStyle}
+            >
+              {loading
+                ? "Creating..."
+                : "Create Battle"}
+            </button>
+
+            <div
+              style={{
+                marginTop: "25px",
+              }}
+            >
+              <input
+                value={battleIdInput}
+                onChange={(e) =>
+                  setBattleIdInput(
+                    e.target.value,
+                  )
+                }
+                placeholder="Enter Battle ID"
+                style={inputStyle}
+              />
+
+              <button
+                onClick={joinBattle}
+                disabled={loading}
+                style={buttonStyle}
+              >
+                {loading
+                  ? "Joining..."
+                  : "Join Battle"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {battle && (
+          <>
+            <div
+              style={{
+                padding: "20px",
+                background: "#1c1c1c",
+                borderRadius: "12px",
+                marginBottom: "20px",
+              }}
+            >
+              <h2>
+                Battle: {battle.id}
+              </h2>
+
+              <p>
+                Status: {battle.status}
+              </p>
+
+              <p>
+                Round: {battle.round_number}
+              </p>
+
+              {battle.status ===
+                "waiting" && (
+                <>
+                  <p>
+                    Waiting for another
+                    player...
+                  </p>
+
+                  {iAmCreator && (
+                    <button
+                      onClick={
+                        cancelBattle
+                      }
+                      disabled={loading}
+                      style={buttonStyle}
+                    >
+                      Cancel Battle
+                    </button>
+                  )}
+                </>
+              )}
+
+              {battle.status ===
+                "active" && (
+                <>
+                  <h3>
+                    {isMyTurn
+                      ? "🔥 YOUR TURN"
+                      : "⏳ Waiting for opponent..."}
+                  </h3>
+
+                  <button
+                    onClick={attack}
+                    disabled={
+                      loading ||
+                      !isMyTurn
+                    }
+                    style={{
+                      ...buttonStyle,
+                      opacity:
+                        isMyTurn
+                          ? 1
+                          : 0.5,
+                    }}
+                  >
+                    {loading
+                      ? "Attacking..."
+                      : "⚔️ ATTACK"}
+                  </button>
+                </>
+              )}
+
+              {battleFinished && (
+                <div
+                  style={{
+                    marginTop: "20px",
+                    padding: "15px",
+                    background: "#252525",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <h2>
+                    🏆 Battle Finished
+                  </h2>
+
+                  <p>
+                    Winner:{" "}
+                    {battle.winner_name ??
+                      "Unknown"}
+                  </p>
+
+                  {battle.winner_id ===
+                    userId ? (
+                    <p>
+                      You won! Your clone
+                      reward has been created.
+                    </p>
+                  ) : (
+                    <p>
+                      You lost. Your pet is
+                      battle-locked for 24 hours.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                padding: "20px",
+                background: "#1c1c1c",
+                borderRadius: "12px",
+              }}
+            >
+              <h2>📜 Combat Log</h2>
+
+              {logs.length === 0 ? (
+                <p>
+                  No combat actions yet.
+                </p>
+              ) : (
+                logs.map((log) => (
+                  <div
+                    key={log.id}
+                    style={{
+                      padding: "8px 0",
+                      borderBottom:
+                        "1px solid #333",
+                    }}
+                  >
+                    <span
+                      style={{
+                        opacity: 0.6,
+                      }}
+                    >
+                      Round{" "}
+                      {log.round_number}:{" "}
+                    </span>
+
+                    {log.message}
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PetSelector({
+  userId,
+  onSelect,
+}: {
+  userId: string | null;
+  onSelect: (pet: Pet) => void;
+}) {
+  const [pets, setPets] = useState<Pet[]>(
+    [],
+  );
+  const [loading, setLoading] =
+    useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    loadPets();
+  }, [userId]);
+
+  async function loadPets() {
+    setLoading(true);
+
+    const { data, error } =
+      await supabase
+        .from("pets")
+        .select(`
+          id,
+          name,
+          species,
+          tier,
+          attack,
+          defense,
+          max_health,
+          crit_chance,
+          multi_attack_chance,
+          passive_effect
+        `)
+        .eq("owner_id", userId)
+        .eq("in_battle", false)
+        .order("name");
+
+    if (!error && data) {
+      setPets(data as Pet[]);
+    }
+
+    setLoading(false);
+  }
+
+  if (!userId) {
+    return (
+      <p>
+        Please sign in to battle.
+      </p>
     );
   }
-});
+
+  if (loading) {
+    return <p>Loading pets...</p>;
+  }
+
+  if (pets.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "20px",
+          background: "#1c1c1c",
+          borderRadius: "12px",
+        }}
+      >
+        <h2>No available pets</h2>
+        <p>
+          You don't currently have a pet
+          available for battle.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        marginBottom: "20px",
+      }}
+    >
+      <h2>Select your pet</h2>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns:
+            "repeat(auto-fill, minmax(220px, 1fr))",
+          gap: "15px",
+        }}
+      >
+        {pets.map((pet) => (
+          <button
+            key={pet.id}
+            onClick={() =>
+              onSelect(pet)
+            }
+            style={{
+              background: "#1c1c1c",
+              color: "white",
+              border: "1px solid #444",
+              borderRadius: "12px",
+              padding: "18px",
+              textAlign: "left",
+              cursor: "pointer",
+            }}
+          >
+            <h3>{pet.name}</h3>
+
+            <p>
+              Tier: {pet.tier}
+            </p>
+
+            <p>
+              ⚔️ {pet.attack} ATK
+            </p>
+
+            <p>
+              🛡️ {pet.defense} DEF
+            </p>
+
+            <p>
+              ❤️ {pet.max_health} HP
+            </p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const buttonStyle: React.CSSProperties = {
+  padding: "12px 18px",
+  border: "none",
+  borderRadius: "8px",
+  background: "#4f46e5",
+  color: "white",
+  fontWeight: "bold",
+  cursor: "pointer",
+  marginRight: "10px",
+};
+
+const inputStyle: React.CSSProperties = {
+  padding: "12px",
+  borderRadius: "8px",
+  border: "1px solid #555",
+  background: "#111",
+  color: "white",
+  marginRight: "10px",
+  width: "280px",
+};
