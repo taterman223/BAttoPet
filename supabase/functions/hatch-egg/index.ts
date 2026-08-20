@@ -17,39 +17,16 @@ const ATTO_GATEKEEPER =
 
 const SPRITE_BUCKET = "pet-sprites";
 
-// Gemini image generation model.
-const GEMINI_MODEL = "gemini-2.5-flash-image";
+// Current Gemini image-generation model.
+const GEMINI_MODEL = "gemini-3.1-flash-image";
 
 const EGGS: Record<string, { price: number; tier: string }> = {
-  worthless: {
-    price: 1,
-    tier: "Worthless",
-  },
-
-  decent: {
-    price: 5,
-    tier: "Decent",
-  },
-
-  average: {
-    price: 10,
-    tier: "Average",
-  },
-
-  good: {
-    price: 25,
-    tier: "Good",
-  },
-
-  fabulous: {
-    price: 50,
-    tier: "Fabulous",
-  },
-
-  excellent: {
-    price: 100,
-    tier: "Excellent",
-  },
+  worthless: { price: 1, tier: "Worthless" },
+  average: { price: 10, tier: "Average" },
+  decent: { price: 5, tier: "Decent" },
+  good: { price: 25, tier: "Good" },
+  fabulous: { price: 50, tier: "Fabulous" },
+  excellent: { price: 100, tier: "Excellent" },
 };
 
 Deno.serve(async (req: Request) => {
@@ -117,8 +94,7 @@ Deno.serve(async (req: Request) => {
     if (!token) {
       return json(
         {
-          error:
-            "You must be signed in.",
+          error: "You must be signed in.",
         },
         401,
       );
@@ -127,17 +103,14 @@ Deno.serve(async (req: Request) => {
     const {
       data: userData,
       error: authError,
-    } =
-      await admin.auth.getUser(token);
+    } = await admin.auth.getUser(token);
 
-    const user =
-      userData?.user;
+    const user = userData?.user;
 
     if (authError || !user) {
       return json(
         {
-          error:
-            "You must be signed in.",
+          error: "You must be signed in.",
           details:
             authError?.message ?? null,
         },
@@ -156,43 +129,32 @@ Deno.serve(async (req: Request) => {
     } catch {
       return json(
         {
-          error:
-            "Invalid JSON request.",
+          error: "Invalid JSON request.",
         },
         400,
       );
     }
 
     const eggType =
-      String(
-        body?.egg_type ?? "",
-      ).trim();
+      String(body?.egg_type ?? "").trim();
 
     const txHash =
-      String(
-        body?.tx_hash ?? "",
-      )
+      String(body?.tx_hash ?? "")
         .trim()
         .toUpperCase();
 
-    const egg =
-      EGGS[eggType];
+    const egg = EGGS[eggType];
 
     if (!egg) {
       return json(
         {
-          error:
-            "Unknown egg type.",
+          error: "Unknown egg type.",
         },
         400,
       );
     }
 
-    if (
-      !/^[0-9A-F]{64}$/.test(
-        txHash,
-      )
-    ) {
+    if (!/^[0-9A-F]{64}$/.test(txHash)) {
       return json(
         {
           error:
@@ -232,13 +194,8 @@ Deno.serve(async (req: Request) => {
     } =
       await admin
         .from("players")
-        .select(
-          "id, atto_address",
-        )
-        .eq(
-          "id",
-          user.id,
-        )
+        .select("id, atto_address")
+        .eq("id", user.id)
         .maybeSingle();
 
     if (playerError) {
@@ -283,17 +240,13 @@ Deno.serve(async (req: Request) => {
     let response: Response;
 
     try {
-      response =
-        await fetch(
-          url,
-          {
-            method: "GET",
-            headers: {
-              Accept:
-                "application/x-ndjson, application/json",
-            },
-          },
-        );
+      response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept:
+            "application/x-ndjson, application/json",
+        },
+      });
     } catch (err) {
       console.error(
         "ATTO Gatekeeper request failed:",
@@ -310,9 +263,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!response.ok) {
-      if (
-        response.status === 404
-      ) {
+      if (response.status === 404) {
         return json(
           {
             error:
@@ -332,9 +283,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const text =
-      await readFirstJson(
-        response,
-      );
+      await readFirstJson(response);
 
     if (!text) {
       return json(
@@ -349,8 +298,7 @@ Deno.serve(async (req: Request) => {
     let tx: any;
 
     try {
-      tx =
-        JSON.parse(text);
+      tx = JSON.parse(text);
     } catch {
       return json(
         {
@@ -366,9 +314,7 @@ Deno.serve(async (req: Request) => {
     // ============================================================
 
     if (
-      String(
-        tx?.hash ?? "",
-      ).toUpperCase() !==
+      String(tx?.hash ?? "").toUpperCase() !==
       txHash
     ) {
       return json(
@@ -384,10 +330,7 @@ Deno.serve(async (req: Request) => {
     // VERIFY SEND
     // ============================================================
 
-    if (
-      tx?.blockType !==
-      "SEND"
-    ) {
+    if (tx?.blockType !== "SEND") {
       return json(
         {
           error:
@@ -402,20 +345,12 @@ Deno.serve(async (req: Request) => {
     // ============================================================
 
     const senderPublicKey =
-      String(
-        tx?.publicKey ?? "",
-      ).toUpperCase();
+      String(tx?.publicKey ?? "").toUpperCase();
 
     const receiverPublicKey =
-      String(
-        tx?.subjectPublicKey ?? "",
-      ).toUpperCase();
+      String(tx?.subjectPublicKey ?? "").toUpperCase();
 
-    if (
-      !/^[0-9A-F]{64}$/.test(
-        senderPublicKey,
-      )
-    ) {
+    if (!/^[0-9A-F]{64}$/.test(senderPublicKey)) {
       return json(
         {
           error:
@@ -425,11 +360,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (
-      !/^[0-9A-F]{64}$/.test(
-        receiverPublicKey,
-      )
-    ) {
+    if (!/^[0-9A-F]{64}$/.test(receiverPublicKey)) {
       return json(
         {
           error:
@@ -459,9 +390,7 @@ Deno.serve(async (req: Request) => {
 
     if (
       senderAddress.toLowerCase() !==
-      String(
-        player.atto_address,
-      )
+      String(player.atto_address)
         .trim()
         .toLowerCase()
     ) {
@@ -500,14 +429,10 @@ Deno.serve(async (req: Request) => {
 
     try {
       previousBalance =
-        BigInt(
-          tx.previousBalance,
-        );
+        BigInt(tx.previousBalance);
 
       balance =
-        BigInt(
-          tx.balance,
-        );
+        BigInt(tx.balance);
     } catch {
       return json(
         {
@@ -518,10 +443,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (
-      previousBalance <
-      balance
-    ) {
+    if (previousBalance < balance) {
       return json(
         {
           error:
@@ -532,17 +454,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const amountRaw =
-      previousBalance -
-      balance;
+      previousBalance - balance;
 
     const requiredRaw =
       BigInt(egg.price) *
       RAW_PER_ATTO;
 
-    if (
-      amountRaw <
-      requiredRaw
-    ) {
+    if (amountRaw < requiredRaw) {
       return json(
         {
           error:
@@ -560,9 +478,7 @@ Deno.serve(async (req: Request) => {
       error: claimErr,
     } =
       await admin
-        .from(
-          "used_transaction_hashes",
-        )
+        .from("used_transaction_hashes")
         .insert({
           hash: txHash,
           player_id: player.id,
@@ -571,10 +487,7 @@ Deno.serve(async (req: Request) => {
         });
 
     if (claimErr) {
-      if (
-        claimErr.code ===
-        "23505"
-      ) {
+      if (claimErr.code === "23505") {
         return json(
           {
             error:
@@ -600,7 +513,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ============================================================
-    // GENERATE PET DATA
+    // GENERATE PET
     // ============================================================
 
     const {
@@ -610,48 +523,35 @@ Deno.serve(async (req: Request) => {
       await admin.rpc(
         "generate_pet",
         {
-          p_owner:
-            player.id,
-          p_tier:
-            egg.tier,
+          p_owner: player.id,
+          p_tier: egg.tier,
         },
       );
 
-    if (
-      petErr ||
-      !pet
-    ) {
+    if (petErr || !pet) {
       console.error(
-        "Pet generation error:",
+        "PET GENERATION ERROR:",
         petErr,
       );
 
-      // Give the transaction back so the player
-      // can retry if pet generation failed.
       await admin
-        .from(
-          "used_transaction_hashes",
-        )
+        .from("used_transaction_hashes")
         .delete()
-        .eq(
-          "hash",
-          txHash,
-        );
+        .eq("hash", txHash);
 
       return json(
         {
           error:
             "Payment verified but the pet could not be created.",
           details:
-            petErr?.message ??
-            null,
+            petErr?.message ?? null,
         },
         500,
       );
     }
 
     console.log(
-      "PET CREATED",
+      "PET CREATED:",
       {
         id: pet.id,
         name: pet.name,
@@ -664,9 +564,7 @@ Deno.serve(async (req: Request) => {
     // GENERATE AI SPRITE
     // ============================================================
 
-    let spriteUrl:
-      | string
-      | null = null;
+    let spriteUrl: string;
 
     try {
       spriteUrl =
@@ -681,26 +579,17 @@ Deno.serve(async (req: Request) => {
         spriteError,
       );
 
-      // Delete the pet because we don't want
-      // a paid egg to create a broken pet.
+      // Remove the pet.
       await admin
         .from("pets")
         .delete()
-        .eq(
-          "id",
-          pet.id,
-        );
+        .eq("id", pet.id);
 
-      // Allow the same payment to be retried.
+      // Release transaction.
       await admin
-        .from(
-          "used_transaction_hashes",
-        )
+        .from("used_transaction_hashes")
         .delete()
-        .eq(
-          "hash",
-          txHash,
-        );
+        .eq("hash", txHash);
 
       return json(
         {
@@ -709,16 +598,14 @@ Deno.serve(async (req: Request) => {
           details:
             spriteError instanceof Error
               ? spriteError.message
-              : String(
-                  spriteError,
-                ),
+              : String(spriteError),
         },
         502,
       );
     }
 
     // ============================================================
-    // RECORD PURCHASE
+    // PURCHASE RECORD
     // ============================================================
 
     const {
@@ -727,40 +614,33 @@ Deno.serve(async (req: Request) => {
       await admin
         .from("purchases")
         .insert({
-          player_id:
-            player.id,
-          tx_hash:
-            txHash,
-          egg_type:
-            eggType,
-          pet_id:
-            pet.id,
+          player_id: player.id,
+          tx_hash: txHash,
+          egg_type: eggType,
+          pet_id: pet.id,
         });
 
     if (purchaseErr) {
       console.error(
-        "Purchase record error:",
+        "PURCHASE RECORD ERROR:",
         purchaseErr,
       );
     }
 
     // ============================================================
-    // RETURN PET
+    // RETURN
     // ============================================================
-
-    const finalPet = {
-      ...pet,
-      sprite_url:
-        spriteUrl,
-    };
 
     return json({
       ok: true,
-      pet: finalPet,
+      pet: {
+        ...pet,
+        sprite_url: spriteUrl,
+      },
     });
   } catch (err) {
     console.error(
-      "Hatch egg error:",
+      "HATCH EGG ERROR:",
       err,
     );
 
@@ -777,13 +657,11 @@ Deno.serve(async (req: Request) => {
 });
 
 // =============================================================
-// AI SPRITE GENERATION + STORAGE
+// GENERATE + UPLOAD SPRITE
 // =============================================================
 
 async function generateAndUploadSprite(
-  admin: ReturnType<
-    typeof createClient
-  >,
+  admin: ReturnType<typeof createClient>,
   googleApiKey: string,
   pet: any,
 ): Promise<string> {
@@ -806,120 +684,156 @@ async function generateAndUploadSprite(
     );
 
   const element =
-    extractElement(
-      appearance,
-    );
+    extractElement(appearance);
 
   const anatomy =
-    speciesAnatomy(
-      species,
-    );
+    speciesAnatomy(species);
 
   const prompt = `
-Create ONE original fantasy creature game sprite.
+Create ONE original collectible fantasy creature game sprite.
 
-CREATURE SPECIES:
-${species}
+The creature species is: ${species}
 
-THIS SPECIES IS MANDATORY.
-The creature must unmistakably have the anatomy of a ${species}.
+THIS SPECIES MUST REMAIN UNMISTAKABLE.
 
-ANATOMY REQUIREMENTS:
+Required anatomy:
 ${anatomy}
 
-PET APPEARANCE:
+Appearance:
 ${appearance}
 
-PET PERSONALITY:
+Personality:
 ${personality}
 
-ELEMENT:
+Element:
 ${element}
 
+IMPORTANT:
+The species determines the creature's anatomy.
+Do not replace or reinterpret the species.
+
+If the species is a BOAR:
+- make it unmistakably a wild pig/boar
+- stocky compact body
+- four sturdy legs
+- cloven hooves
+- broad pig snout
+- visible tusks
+- triangular ears
+- short tail
+- mammal body
+- absolutely NO wings
+- absolutely NO antennae
+- absolutely NO insect body
+- absolutely NO moth anatomy
+
+If the species is a MOTH:
+- make it unmistakably a moth
+- insect body
+- six legs
+- two large wings
+- antennae
+
+If the species is a WOLF:
+- make it unmistakably a wolf
+- canine body
+- four legs
+- wolf ears
+- long muzzle
+- bushy tail
+
+If the species is a FROG:
+- make it unmistakably a frog
+- amphibian body
+- four legs
+- large eyes
+- wide mouth
+
+If the species is a DRAGON:
+- make it unmistakably a fantasy dragon
+- reptilian body
+- four legs
+- tail
+- horns
+- wings
+
+The creature can have fantasy colors, magical markings,
+elemental effects, crystals, accessories, and unusual features,
+but its underlying anatomy MUST stay faithful to the species.
+
 STYLE:
-- cute fantasy game creature
 - polished collectible game sprite
+- cute but detailed
+- fantasy creature
 - full body
 - centered
 - 3/4 view
-- clear silhouette
-- highly recognizable species
-- clean shapes
-- detailed but readable
+- strong readable silhouette
+- clean edges
+- vibrant but coherent colors
 - unique design
-- no text
-- no letters
-- no numbers
-- no watermark
-- no humans
-- no scenery
-- no environment
-- no additional creatures
 - isolated creature
-- square composition
+- simple plain background
+- square image
 
-SPECIES SAFETY RULE:
-Do NOT transform the creature into another animal.
+DO NOT INCLUDE:
+- text
+- letters
+- numbers
+- logos
+- watermark
+- humans
+- multiple creatures
+- scenery
+- environment
+- another animal
+- hybrid anatomy
 
-For example:
-- a Boar must remain a boar
-- a Moth must remain a moth
-- a Dragon must remain a dragon
-- a Frog must remain a frog
-- a Wolf must remain a wolf
-
-Do not mix species anatomy unless the species itself is explicitly a hybrid.
-
-The colors, markings, element and accessories should change the design,
-but the underlying animal anatomy must remain unmistakable.
-
-Generate only the finished creature image.
+Generate ONLY the finished creature sprite.
 `;
 
   console.log(
-    "GENERATING SPRITE:",
+    "GEMINI SPRITE REQUEST:",
     {
+      model: GEMINI_MODEL,
       species,
       element,
     },
   );
 
-  const geminiUrl =
-    `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent`;
+  // ============================================================
+  // CURRENT GEMINI INTERACTIONS API
+  // ============================================================
 
   const geminiResponse =
     await fetch(
-      geminiUrl,
+      "https://generativelanguage.googleapis.com/v1beta/interactions",
       {
         method: "POST",
+
         headers: {
           "Content-Type":
             "application/json",
+
           "x-goog-api-key":
             googleApiKey,
         },
+
         body: JSON.stringify({
-          contents: [
+          model: GEMINI_MODEL,
+
+          input: [
             {
-              parts: [
-                {
-                  text: prompt,
-                },
-              ],
+              type: "text",
+              text: prompt,
             },
           ],
 
-          generationConfig: {
-            responseModalities: [
-              "IMAGE",
-            ],
-
-            responseFormat: {
-              image: {
-                aspectRatio:
-                  "1:1",
-              },
-            },
+          response_format: {
+            type: "image",
+            mime_type: "image/png",
+            aspect_ratio: "1:1",
+            image_size: "1K",
           },
         }),
       },
@@ -928,14 +842,19 @@ Generate only the finished creature image.
   const geminiText =
     await geminiResponse.text();
 
+  console.log(
+    "GEMINI STATUS:",
+    geminiResponse.status,
+  );
+
   if (!geminiResponse.ok) {
     console.error(
-      "GEMINI ERROR:",
+      "GEMINI RESPONSE:",
       geminiText,
     );
 
     throw new Error(
-      `Gemini image generation failed (${geminiResponse.status}).`,
+      `Gemini image generation failed (${geminiResponse.status}): ${geminiText.slice(0, 1000)}`,
     );
   }
 
@@ -943,121 +862,95 @@ Generate only the finished creature image.
 
   try {
     geminiData =
-      JSON.parse(
-        geminiText,
-      );
+      JSON.parse(geminiText);
   } catch {
+    console.error(
+      "INVALID GEMINI JSON:",
+      geminiText.slice(0, 2000),
+    );
+
     throw new Error(
       "Gemini returned invalid JSON.",
     );
   }
 
   // ============================================================
-  // FIND GENERATED IMAGE
+  // GET GENERATED IMAGE
   // ============================================================
 
-  let imageBase64:
-    | string
-    | null = null;
+  const imageBase64 =
+    geminiData?.output_image?.data ??
+    findImageInSteps(
+      geminiData?.steps,
+    );
 
-  let mimeType =
+  const mimeType =
+    geminiData?.output_image?.mime_type ??
+    findMimeTypeInSteps(
+      geminiData?.steps,
+    ) ??
     "image/png";
-
-  const candidates =
-    geminiData?.candidates ??
-    [];
-
-  for (
-    const candidate of candidates
-  ) {
-    const parts =
-      candidate?.content
-        ?.parts ??
-      [];
-
-    for (
-      const part of parts
-    ) {
-      if (
-        part?.inlineData
-          ?.data
-      ) {
-        imageBase64 =
-          part.inlineData.data;
-
-        mimeType =
-          part.inlineData
-            .mimeType ??
-          "image/png";
-
-        break;
-      }
-
-      // Some API representations use snake_case.
-      if (
-        part?.inline_data
-          ?.data
-      ) {
-        imageBase64 =
-          part.inline_data.data;
-
-        mimeType =
-          part.inline_data
-            .mime_type ??
-          "image/png";
-
-        break;
-      }
-    }
-
-    if (imageBase64) {
-      break;
-    }
-  }
 
   if (!imageBase64) {
     console.error(
-      "NO IMAGE IN GEMINI RESPONSE:",
+      "GEMINI DID NOT RETURN IMAGE:",
       JSON.stringify(
         geminiData,
-      ).slice(
-        0,
-        5000,
-      ),
+      ).slice(0, 5000),
     );
 
     throw new Error(
-      "Gemini did not return an image.",
+      "Gemini completed but did not return an image.",
     );
   }
+
+  console.log(
+    "GEMINI IMAGE RECEIVED:",
+    {
+      mimeType,
+      base64Length:
+        imageBase64.length,
+    },
+  );
 
   // ============================================================
   // BASE64 → BYTES
   // ============================================================
 
-  const imageBytes =
-    Uint8Array.from(
-      atob(imageBase64),
-      (char) =>
-        char.charCodeAt(0),
+  let imageBytes: Uint8Array;
+
+  try {
+    imageBytes =
+      Uint8Array.from(
+        atob(imageBase64),
+        (char) =>
+          char.charCodeAt(0),
+      );
+  } catch {
+    throw new Error(
+      "Gemini returned invalid image data.",
     );
+  }
+
+  if (imageBytes.length === 0) {
+    throw new Error(
+      "Gemini returned an empty image.",
+    );
+  }
 
   // ============================================================
-  // FILE PATH
+  // STORAGE PATH
   // ============================================================
 
   const safePetId =
-    String(
-      pet.id,
-    ).replace(
-      /[^a-zA-Z0-9_-]/g,
-      "",
-    );
+    String(pet.id)
+      .replace(
+        /[^a-zA-Z0-9_-]/g,
+        "",
+      );
 
   const extension =
-    mimeType.includes(
-      "jpeg",
-    )
+    mimeType.includes("jpeg")
       ? "jpg"
       : "png";
 
@@ -1065,22 +958,19 @@ Generate only the finished creature image.
     `pets/${safePetId}.${extension}`;
 
   // ============================================================
-  // UPLOAD TO SUPABASE STORAGE
+  // UPLOAD
   // ============================================================
 
   const {
     error: uploadError,
   } =
     await admin.storage
-      .from(
-        SPRITE_BUCKET,
-      )
+      .from(SPRITE_BUCKET)
       .upload(
         filePath,
         imageBytes,
         {
-          contentType:
-            mimeType,
+          contentType: mimeType,
           cacheControl:
             "31536000",
           upsert: true,
@@ -1106,17 +996,17 @@ Generate only the finished creature image.
     data: publicData,
   } =
     admin.storage
-      .from(
-        SPRITE_BUCKET,
-      )
-      .getPublicUrl(
-        filePath,
-      );
+      .from(SPRITE_BUCKET)
+      .getPublicUrl(filePath);
 
   const publicUrl =
     publicData?.publicUrl;
 
   if (!publicUrl) {
+    await admin.storage
+      .from(SPRITE_BUCKET)
+      .remove([filePath]);
+
     throw new Error(
       "Could not create sprite public URL.",
     );
@@ -1132,13 +1022,9 @@ Generate only the finished creature image.
     await admin
       .from("pets")
       .update({
-        sprite_url:
-          publicUrl,
+        sprite_url: publicUrl,
       })
-      .eq(
-        "id",
-        pet.id,
-      );
+      .eq("id", pet.id);
 
   if (updateError) {
     console.error(
@@ -1146,14 +1032,9 @@ Generate only the finished creature image.
       updateError,
     );
 
-    // Remove orphaned sprite.
     await admin.storage
-      .from(
-        SPRITE_BUCKET,
-      )
-      .remove([
-        filePath,
-      ]);
+      .from(SPRITE_BUCKET)
+      .remove([filePath]);
 
     throw new Error(
       `Could not save sprite URL: ${updateError.message}`,
@@ -1169,8 +1050,79 @@ Generate only the finished creature image.
 }
 
 // =============================================================
-// Species-specific anatomy.
-// This is what prevents a Boar from becoming a Moth.
+// FIND IMAGE IN INTERACTION STEPS
+// =============================================================
+
+function findImageInSteps(
+  steps: any,
+): string | null {
+  if (!Array.isArray(steps)) {
+    return null;
+  }
+
+  for (const step of steps) {
+    if (step?.type !== "model_output") {
+      continue;
+    }
+
+    const content =
+      step?.content;
+
+    if (!Array.isArray(content)) {
+      continue;
+    }
+
+    for (const block of content) {
+      if (
+        block?.type === "image" &&
+        typeof block?.data === "string"
+      ) {
+        return block.data;
+      }
+    }
+  }
+
+  return null;
+}
+
+// =============================================================
+// FIND IMAGE MIME TYPE
+// =============================================================
+
+function findMimeTypeInSteps(
+  steps: any,
+): string | null {
+  if (!Array.isArray(steps)) {
+    return null;
+  }
+
+  for (const step of steps) {
+    if (step?.type !== "model_output") {
+      continue;
+    }
+
+    const content =
+      step?.content;
+
+    if (!Array.isArray(content)) {
+      continue;
+    }
+
+    for (const block of content) {
+      if (
+        block?.type === "image" &&
+        typeof block?.mime_type === "string"
+      ) {
+        return block.mime_type;
+      }
+    }
+  }
+
+  return null;
+}
+
+// =============================================================
+// SPECIES ANATOMY
 // =============================================================
 
 function speciesAnatomy(
@@ -1186,31 +1138,31 @@ function speciesAnatomy(
     string
   > = {
     fox:
-      "quadruped mammal, pointed fox ears, long muzzle, bushy tail, four legs",
+      "quadruped mammal, pointed fox ears, long fox muzzle, four legs, paws, large bushy tail",
 
     cat:
-      "feline quadruped, cat ears, short muzzle, paws, four legs, long tail",
+      "feline quadruped, cat ears, feline face, four legs, paws, long tail",
 
     wolf:
-      "large canine quadruped, wolf ears, long muzzle, four legs, bushy tail",
+      "large canine quadruped, wolf ears, long muzzle, four legs, paws, bushy tail",
 
     dragon:
-      "fantasy reptilian dragon, four legs, long tail, horns, wings",
+      "fantasy reptilian dragon, four legs, long tail, horns, wings, claws",
 
     slime:
-      "amorphous gelatinous creature, rounded slime body, no mammal anatomy",
+      "amorphous gelatinous creature with a rounded slime body and no normal animal anatomy",
 
     owl:
-      "bird anatomy, round owl body, large forward-facing eyes, beak, wings, talons",
+      "bird anatomy, round owl body, large forward-facing eyes, beak, two wings, feathers, talons",
 
     rabbit:
-      "small mammal quadruped, very long upright ears, rabbit face, fluffy tail",
+      "small mammal quadruped, very long upright ears, rabbit face, four legs, paws, fluffy tail",
 
     bear:
-      "large stocky mammal, bear head, rounded ears, four thick legs, paws",
+      "large stocky mammal, bear head, rounded ears, four thick legs, paws, short tail",
 
     serpent:
-      "long snake-like reptile body, elongated body, scales, no legs",
+      "long snake-like reptile body, scales, elongated body, no legs",
 
     moth:
       "insect anatomy, six legs, two large wings, antennae, segmented body",
@@ -1219,28 +1171,28 @@ function speciesAnatomy(
       "amphibian frog anatomy, squat body, four legs, large eyes, wide mouth",
 
     bat:
-      "small mammal bat anatomy, two wings formed from elongated finger bones, large ears, four limbs",
+      "small mammal bat anatomy, two membrane wings, large ears, four limbs, furry body",
 
     stag:
-      "deer-like quadruped mammal, hooves, long legs, antlers, deer head",
+      "deer-like quadruped mammal, hooves, long legs, antlers, deer head, short tail",
 
     boar:
-      "stocky wild pig mammal, four short sturdy legs, cloven hooves, broad pig snout, tusks, triangular ears, compact body, short tail",
+      "stocky wild pig mammal, compact body, four short sturdy legs, cloven hooves, broad pig snout, tusks, triangular ears, short tail",
 
     kraken:
-      "large fantasy sea creature with a central body and multiple tentacles, cephalopod anatomy",
+      "fantasy cephalopod, central body with multiple tentacles, squid/octopus-like anatomy",
 
     golem:
-      "large humanoid magical construct made of stone or crystal, heavy blocky limbs",
+      "large magical construct made from stone or crystal, heavy blocky limbs and humanoid shape",
 
     raven:
-      "black corvid bird anatomy, two wings, beak, feathers, talons",
+      "black corvid bird anatomy, feathers, beak, two wings, two legs, talons",
 
     eel:
       "long slender aquatic fish-like body, fins, smooth elongated silhouette, no legs",
 
     ram:
-      "stocky sheep-like quadruped mammal, curled horns, woolly body, four legs, hooves",
+      "stocky sheep-like quadruped mammal, woolly body, curled horns, four legs, hooves",
 
     beetle:
       "insect anatomy, six legs, hard wing covers, antennae, segmented body",
@@ -1248,12 +1200,12 @@ function speciesAnatomy(
 
   return (
     anatomy[key] ??
-    `distinctive ${species} anatomy that is clearly recognizable and does not resemble another animal`
+    `distinctive ${species} anatomy that is immediately recognizable and does not resemble another species`
   );
 }
 
 // =============================================================
-// Extract element from appearance text.
+// ELEMENT
 // =============================================================
 
 function extractElement(
@@ -1275,14 +1227,8 @@ function extractElement(
   const lower =
     appearance.toLowerCase();
 
-  for (
-    const element of elements
-  ) {
-    if (
-      lower.includes(
-        element,
-      )
-    ) {
+  for (const element of elements) {
+    if (lower.includes(element)) {
       return element;
     }
   }
@@ -1291,35 +1237,26 @@ function extractElement(
 }
 
 // =============================================================
-// Convert public key → ATTO address.
+// ATTO ADDRESS
 // =============================================================
 
 function publicKeyToAttoAddress(
   publicKeyHex: string,
 ): string {
   const publicKey =
-    hexToBytes(
-      publicKeyHex,
-    );
+    hexToBytes(publicKeyHex);
 
-  if (
-    publicKey.length !==
-    32
-  ) {
+  if (publicKey.length !== 32) {
     throw new Error(
       "ATTO public key must be exactly 32 bytes.",
     );
   }
 
   const algorithm =
-    new Uint8Array([
-      0,
-    ]);
+    new Uint8Array([0]);
 
   const checksumInput =
-    new Uint8Array(
-      33,
-    );
+    new Uint8Array(33);
 
   checksumInput.set(
     algorithm,
@@ -1340,9 +1277,7 @@ function publicKeyToAttoAddress(
     );
 
   const addressBytes =
-    new Uint8Array(
-      38,
-    );
+    new Uint8Array(38);
 
   addressBytes.set(
     algorithm,
@@ -1360,31 +1295,23 @@ function publicKeyToAttoAddress(
   );
 
   const encoded =
-    encodeBase32(
-      addressBytes,
-    )
-      .replace(
-        /=+$/,
-        "",
-      )
+    encodeBase32(addressBytes)
+      .replace(/=+$/, "")
       .toLowerCase();
 
   return `atto://${encoded}`;
 }
 
 // =============================================================
-// Hex → bytes.
+// HEX → BYTES
 // =============================================================
 
 function hexToBytes(
   hex: string,
 ): Uint8Array {
   if (
-    hex.length % 2 !==
-      0 ||
-    !/^[0-9A-Fa-f]+$/.test(
-      hex,
-    )
+    hex.length % 2 !== 0 ||
+    !/^[0-9A-Fa-f]+$/.test(hex)
   ) {
     throw new Error(
       "Invalid hexadecimal public key.",
@@ -1403,10 +1330,7 @@ function hexToBytes(
   ) {
     bytes[i / 2] =
       parseInt(
-        hex.slice(
-          i,
-          i + 2,
-        ),
+        hex.slice(i, i + 2),
         16,
       );
   }
@@ -1415,14 +1339,12 @@ function hexToBytes(
 }
 
 // =============================================================
-// Read first JSON object from NDJSON.
+// READ FIRST JSON FROM ATTO NDJSON
 // =============================================================
 
 async function readFirstJson(
   response: Response,
-): Promise<
-  string | null
-> {
+): Promise<string | null> {
   if (!response.body) {
     return null;
   }
@@ -1456,17 +1378,12 @@ async function readFirstJson(
         );
 
       const lines =
-        buffer.split(
-          "\n",
-        );
+        buffer.split("\n");
 
       buffer =
-        lines.pop() ??
-        "";
+        lines.pop() ?? "";
 
-      for (
-        const line of lines
-      ) {
+      for (const line of lines) {
         const trimmed =
           line.trim();
 
@@ -1475,9 +1392,7 @@ async function readFirstJson(
         }
 
         try {
-          JSON.parse(
-            trimmed,
-          );
+          JSON.parse(trimmed);
 
           await reader.cancel();
 
@@ -1493,10 +1408,7 @@ async function readFirstJson(
 
     if (finalLine) {
       try {
-        JSON.parse(
-          finalLine,
-        );
-
+        JSON.parse(finalLine);
         return finalLine;
       } catch {
         return null;
@@ -1508,43 +1420,33 @@ async function readFirstJson(
     try {
       reader.releaseLock();
     } catch {
-      // Ignore.
+      // Ignore cleanup.
     }
   }
 }
 
 // =============================================================
-// Format ATTO.
+// FORMAT ATTO
 // =============================================================
 
 function formatAtto(
   raw: bigint,
 ): string {
   const whole =
-    raw /
-    RAW_PER_ATTO;
+    raw / RAW_PER_ATTO;
 
   const fraction =
-    raw %
-    RAW_PER_ATTO;
+    raw % RAW_PER_ATTO;
 
-  if (
-    fraction === 0n
-  ) {
+  if (fraction === 0n) {
     return whole.toString();
   }
 
   const fractionText =
     fraction
       .toString()
-      .padStart(
-        9,
-        "0",
-      )
-      .replace(
-        /0+$/,
-        "",
-      );
+      .padStart(9, "0")
+      .replace(/0+$/, "");
 
   return `${whole}.${fractionText}`;
 }
@@ -1558,9 +1460,7 @@ function json(
   status = 200,
 ) {
   return new Response(
-    JSON.stringify(
-      body,
-    ),
+    JSON.stringify(body),
     {
       status,
       headers: {
